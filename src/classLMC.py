@@ -5,391 +5,280 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 import time
 
+def m4(x):
+    '4th order central moment of the vector x'
+    n = len(x)
+    return np.sum((x - x.mean())**4) / (n-1)
 
-def dummy_get(*args, **kwargs):
-    # This function does nothing.
-    # If you use LMC only for "get_bootstrap_estimates",
-    # then you don't need to define inp_get and inp_out_get, so you use this dummy function instead.
-    color = 31  # Red.
-    text = 'You have to define inp_get() and inp_out_get() in the initialization of the LMC class.'
-    print("\033[1;" + str(color) + "m" + text + "\033[m")
+def m22(x,y):
+    'bivariate 2nd central moment'
+    n = len(x)
+    assert n == len(y)
+    return np.sum((x - x.mean())**2 * (y - y.mean())**2) / (n-1)
 
-def default_comp_mean(ytest, reg):
-    return ytest.mean()
-
-def default_comp_var(ytest, reg):
-    return ytest.var(ddof=1)
-
-
-class LassoMC():
+class LMC():
     """
-        Class for the LassoMC
+        Class for the Lasso Monte Carlo (LMC) method.
+    
     """
-    def __init__(self, inp_get = dummy_get, inp_out_get = dummy_get,
-                 regressor = LassoCV(cv = 5, max_iter = 10**4, eps = 1e-4, random_state = None, selection = 'random'),
-                 random_state = None, desired_epsilon = 1e-2, verbose = 0,
-                 NtestMax = 10**5, 
-                 validation_method = 'bootstrap', Nfold = 5,
-                 comp_mean = default_comp_mean, comp_var = default_comp_var):
+    def __init__(self, regressor = LassoCV(cv = 5, max_iter = 10**4, eps = 1e-4, random_state = None, selection = 'random'),
+                 random_state = None, verbose = 0,
+                 splitting_method = 'Nfold',
+                 Nfold = 5,
+                 split_train_percent = 80,
+                 use_alpha = True):
         """
-            inp_get : function to get an array of input vectors. Should be called as inp_get(N, random_state = None).
-            inp_out_get : function to get an array of input vectors and an array of scalar outputs. Should be called as inp_out_get(N, random_state = None).
-            regressor : sklearn regressor to use. By default it is a cross-validated Lasso regressor.
-            random_state : random state to use for selecting samples and training. Default is None.
-            desired_epsilon : repeat MC to converge ot a relative error desired_epsilon. Default value is 1e-2.
+            regressor : sklearn regressor to use. If not an sklearn class, it can be any regressor with 'fit', 'predict', and 'score' methods.
+            random_state : positive int. Seed for reproducible results.
             verbose : 1 or 0.
-            NtestMax : maximum number of samples Xtest. This limit is meant to avoid out-of-memory issues.
-            validation_method : 'bootstrap' or 'split' or '5Fold'. If 'bootstrap', it makes a new set from Xtr by resampling, to compute the estimates.
-                                With this method Xtr and Xval are huge, but overlap, so there is a risk of overfitting.
-                                If 'split', Xtr will be split into trueXtr and Xval using 80/20%. 
-                                This way Xval has never been seen for training, hence no overfitting. However Xtr and Xval are very small.
-                                If '5Fold', 5 folds are used to train Xtr and validate on Xval. No overfitting, but very slow.
-            Nfold : Number of folds. '5Fold' validation will default to 5 folds, but you can use more or less.
-            comp_mean : function to compute mean of ytest. By default it's ytest.mean(), but one might prefer to use np.dot(reg.coef_, trueMean)
-            comp_var : function to compute var of ytest. By default it's ytest.var(ddof=1), but one might prefer to use beta·trueSigma·beta
+            splitting_method :  'none', 'split' or 'Nfold'. Determines how Xtrain is used for training and estimating.
+                                If 'none', Xtrain will be used for training and estimation.
+                                This approach uses all the data, bur risks overfitting on the training and introducing a bias in the estimation.
+                                If 'split', Xtr will be split into a training set of split_train_percent, and a set of 100-split_train_percent for estimating.
+                                This approach will have an unbiased estimation, but will have large variance due to the small training/estimation sets.
+                                If 'Nfold', Nfold models will be trained, each with (N-1)/N portion of the data, and Nfold estimations will be made, each with 1/N portion of the data.
+                                This approach is unbiased, and uses all the available data. 
+            Nfold : Number of folds. Only used if splitting_method='Nfold'.
+            split_train_percent : float in [0,100]. Percentage of data to use for training. Only used if splitting_method='split'
+            use_alpha : boolean. If true, an alpha parameter is ued for the control variates.
         """   
-        self.inp_get = inp_get
-        self.inp_out_get = inp_out_get
-        self.reg = Pipeline([('scaler', StandardScaler()), ('regressor', regressor)])
-        self.rs = np.random.RandomState(random_state)
-        self.goalE = desired_epsilon
-        self.goalE2 = desired_epsilon**2
-        self.verbose = verbose
-        self.NtestMax = NtestMax
-        self.validation_method = validation_method
-        self.Nfold = Nfold
-        self.comp_mean = comp_mean
-        self.comp_var = comp_var
-        
-        self.Ns = []
-        self.meanMCs = []
-        self.stdMCs = []
-        self.meanLMCs = []
-        self.stdLMCs = []
-        self.timings = []
-        
+        self.reg_ = Pipeline([('scaler', StandardScaler()), ('regressor', regressor)])
+        self.rs_ = np.random.RandomState(random_state)
+        self.verbose_ = verbose
+        self.splitting_method_ = splitting_method
+        self.Nfold_ = Nfold if self.splitting_method_ == 'Nfold' else None
+        self.split_train_percent_ = split_train_percent if self.splitting_method_ == 'split' else None
+        self.use_alpha_ = use_alpha
+
     def __get_rs__(self):
-        return self.rs.randint(low = 1, high = 1000)
+        'Returns a random int'
+        return self.rs_.randint(low = 1, high = 10**5)
     
-    def __get_warmup_samples__(self, Ntr, Ntest):
-        self.Xtr, self.ytr = self.inp_out_get(Ntr, random_state = self.__get_rs__())
-        self.Xtest = self.inp_get(Ntest, random_state = self.__get_rs__())
+    def __print_warning__(self, text, color = 33):
+        '''
+        Prints the text in color. Default is 33 (yellow) for warnings. 
+        30 = black, 31 = red (for errors), 32 = green, 33 = yellow, 34 = blue, 35 = magenta, 36 = cyan, 37 = white
+        '''
+        print("\033[1;" + str(color) + "m" + text + "\033[m")
 
-    def __get_more_samples__(self, Ntr, Ntest):
-        Xtr, ytr = self.inp_out_get(Ntr, random_state = self.__get_rs__())
-        self.Xtr = np.concatenate((self.Xtr, Xtr), axis = 0)
-        self.ytr = np.concatenate((self.ytr, ytr), axis = 0)
-
-        if Ntest + self.Xtest.shape[0] <= self.NtestMax:
-            Xtest = self.inp_get(Ntest, random_state = self.__get_rs__())
-            self.Xtest = np.concatenate((self.Xtest, Xtest), axis = 0)
-        elif self.Xtest.shape[0] < self.NtestMax:
-            Xtest = self.inp_get(self.NtestMax - self.Xtest.shape[0], random_state = self.__get_rs__())
-            self.Xtest = np.concatenate((self.Xtest, Xtest), axis = 0)
-        elif self.Xtest.shape[0] >= self.NtestMax and self.verbose:
+    def __print_num_samples__(self):
+        if self.verbose_:
             self.__print_warning__(
-                "Xtest has reached the maximum size " +
-                "NtestMax = {:.2e},".format(self.NtestMax) +
-                " so it won't be increased further.")
+                'N = ' + str(len(self.ytr_)) + ' labelled samples, M = ' +
+                str(self.Xte_.shape[0]) + ' unlabelled samples, and ' +
+                str(self.Xtr_.shape[1]) + ' input dimensions.',
+                color = 32)
 
-    def __test_convergence__(self, checkMC = True, checkLassoMC = True):
+    def __2LMC__ (self, fullypred, ytrue, ypred, use_alpha = True):
         '''
-        Tests whether algorithms have converged, by checking that the slope and std are small.
-        The checkMC and checkLassoMC booleans say which algorithms to check for convergence.
+        This function computes the 2-level estimators.
+        It returns the estimated mean and variance,
+        and also the arrays mean_errors and var_errors, which contain
+        the estimation of the errors made in the estimation of the
+        mean and variance.
+        fullypred : array of size M. Contains many predictions of the surrogate model.
+        ytrue : array of size N, with N<M. Contains the predictions of the expensive/true model.
+        ypred : array of size N. Contains the predictions of the surrogate model.
+        For ytrue and ypred, the same N input points were used. For fullypred, M input points were used,
+        which are different and uncorrelated ot the N inputs used for ytrue and ypred.
+        use_alpha : boolean. If true, an alpha parameter is used for the control variates.
+        '''
+
+        N = len(ypred)
+        M = len(fullypred)
+
+        varpred = np.var(ypred, ddof=1)
+        vartrue = np.var(ytrue, ddof=1)
+        m4pred = m4(ypred)
+
+        # Compute optimal alpha coefficients for the control variates:
+        if use_alpha:
+            cov = np.cov(ypred, ytrue)[1,0]
+            alpha_mean =  cov / varpred
+            numerator = m22(ypred, ytrue) - varpred * vartrue + 2/(N+1)*cov**2
+            alpha_var = np.sqrt(numerator /
+                                (m4pred - varpred**2 + 2/(N+1)*varpred**2)) if numerator > 0 else 0.0
+            self.__print_warning__('Coefs for control variates: alpha_mean = ' +
+                                   '{:.2f}, and alpha_var = {:.2f}'.format(alpha_mean,
+                                                                           alpha_var), color = 34)
+        else:
+            alpha_mean, alpha_var = 1.0, 1.0  # Equivalent to not choosing alphas.
+
+        # Compute estimates:
+        mean = alpha_mean*fullypred.mean() + (ytrue - alpha_mean*ypred).mean()
+        var = alpha_var*fullypred.var(ddof=1) + ytrue.var(ddof=1) - alpha_var*ypred.var(ddof=1)
+
+        # Estimate error in calculations of mean:
+        mean_errors = np.zeros(2)
+        mean_errors[0] = alpha_mean**2 * varpred / M  # First part of 2LMC error.
+        mean_errors[1] = np.var(ytrue - alpha_mean*ypred, ddof=1) / N  # Second part of 2LMC error.
+
+        # Estimate error in calculations of variance:
+        var_errors = np.zeros(2)
+        var_errors[0] = alpha_var**4 * (m4pred - (M-3)/(M-1)*varpred**2) / M  # First part of 2LMC error.
+        var_errors[1] = (m22(ytrue + alpha_var*ypred, ytrue - alpha_var*ypred) +
+                         1/(N-1)*np.var(ytrue + alpha_var*ypred, ddof=1)*np.var(ytrue - alpha_var*ypred, ddof=1) -
+                         (N-2)/(N-1)*(vartrue - alpha_var**2*varpred)**2) / N  # Second part of 2LMC error.
+        return mean, var, mean_errors, var_errors
+
+    def __train_regressor__(self, reg, Xtr, ytr):
+        '''
+        Trains the regressor on Xtr and ytr, and returns the regressor.
+        reg : a pipeline that contains a 'scaler' and a 'regressor'
+        Xtr, ytr : arrays containing the data to be trained on.
         '''
         
-        # Test that there are no trends in the last half of the problem.
-        ## Get indexes of last half of the problem.
-        N_2 = self.Ns[-1] / 2
-        idx_2 = np.argmin(np.abs(np.array(self.Ns) - N_2))
-        Ns = self.Ns[idx_2:]
-        
-        ## Get slope  of last half of the problem for MC estimates.
-        meanMCs = self.meanMCs[idx_2:]
-        slopeMuMC,_ = np.polyfit(Ns, meanMCs, 1)
-        slopeMuMC /= np.mean(meanMCs)
-        slopeMuMC = np.abs(slopeMuMC)
-        
-        stdMCs = self.stdMCs[idx_2:]
-        slopeSigMC,_ = np.polyfit(Ns, stdMCs, 1)
-        slopeSigMC /= np.mean(stdMCs)
-        slopeSigMC = np.abs(slopeSigMC)
+        if 'random_state' in reg['regressor'].get_params().keys():
+            reg['regressor'].set_params(**{'random_state' : self.__get_rs__()})
 
-        ## Get slope  of last half of the problem for LassoMC estimates.
-        meanLMCs = self.meanLMCs[idx_2:]
-        slopeMuLMC,_ = np.polyfit(Ns, meanLMCs, 1)
-        slopeMuLMC /= np.mean(meanLMCs)
-        slopeMuLMC = np.abs(slopeMuLMC)
-        
-        stdLMCs = self.stdLMCs[idx_2:]
-        slopeSigLMC,_ = np.polyfit(Ns, stdLMCs, 1)
-        slopeSigLMC /= np.mean(stdLMCs)
-        slopeSigLMC = np.abs(slopeSigLMC)
+        reg.fit(Xtr, ytr)
 
-        # Now test that std is small in the last half of the problem.
-        errMuMC = np.std(meanMCs) / np.mean(meanMCs)
-        errSigMC = np.std(stdMCs) / np.mean(stdMCs)
-        errMuLMC = np.std(meanLMCs) / np.mean(meanLMCs)
-        errSigLMC = np.std(stdLMCs) / np.mean(stdLMCs)
-        
-        # Test if more sampled of Xtest are needed.
-        Ntest_needed = (self.ytr**2).var() / self.goalE2
-        Ntest = self.Xtest.shape[0]
-        if Ntest_needed > Ntest:
-            self.__get_more_samples__(0, int(np.ceil(Ntest_needed - Ntest)))
-
-        if self.verbose:
-            print('rel_slope mean MC: {:.2e}, LassoMC: {:.2e}'.format(slopeMuMC, slopeMuLMC),
-                  '\nrel_slope std MC: {:.2e}, LassoMC: {:.2e}'.format(slopeSigMC, slopeSigLMC),
-                  '\nrel error mean MC: {:.2e}, LassoMC: {:.2e}'.format(errMuMC, errMuLMC),
-                  '\nrel error std MC: {:.2e}, LassoMC: {:.2e}'.format(errSigMC, errSigLMC))
-
-        hasConvergedMC = ((slopeMuMC < self.goalE) and (slopeSigMC < self.goalE) and
-                          (errMuMC < self.goalE) and (errSigMC < self.goalE))
-        hasConvergedLassoMC = ((slopeMuLMC < self.goalE) and (slopeSigLMC < self.goalE) and
-                               (errMuLMC < self.goalE) and (errSigLMC < self.goalE))
-
-        return (hasConvergedMC or not checkMC) and (hasConvergedLassoMC or not checkLassoMC)
-        
-    def __train_regressor__(self):
-        if 'random_state' in self.reg['regressor'].get_params().keys():
-            self.reg['regressor'].set_params(**{'random_state' : self.__get_rs__()})
-
-        # Only train a model if bootstrap,
-        # or if regressor is a LassoCV or RidgeCV (and optimal alpha needs to be selected.
-        # The 5Fold and Split methods train their own model later on.
-        if (self.validation_method == 'bootstrap'
-            or 'RidgeCV' in str(type(self.reg['regressor']))
-            or 'LassoCV' in str(type(self.reg['regressor']))):
-            mu = self.meanMCs[-1]
-            sig = self.stdMCs[-1]
-            self.reg.fit(self.Xtr, (self.ytr - mu) / sig)  # Fit with normalised output.
-
-        if self.verbose:
-            if 'alphas' in self.reg['regressor'].get_params().keys():
-                print('optimal alpha is', self.reg['regressor'].alpha_)
-            if 'numFeat' in self.reg['regressor'].get_params().keys():
-                print('numFeat is', self.reg['regressor'].get_params()['numFeat'])
-            if ('Lasso' in str(type(self.reg['regressor'])) and
-                'coef_' in self.reg['regressor'].__dict__.keys()):
-                print('numFeat is', len(np.where(self.reg['regressor'].coef_ != 0)[0]))
+        if self.verbose_:
+            if 'alphas' in reg['regressor'].get_params().keys():
+                print('optimal alpha is', reg['regressor'].alpha_)
                 
-    def __2LMC__ (self, fullpred, valtrue, valpred, reg):
-        mean = self.comp_mean(fullpred,reg) + (valtrue - valpred).mean()
-        var = self.comp_var(fullpred,reg) + valtrue.var(ddof=1) - valpred.var(ddof=1)
-        std = np.sqrt(var) if var > 0.0 else self.ytr.std(ddof=1)
-        if var <= 0.0:
-            self.__print_warning__(
-                'Warning! Negative variance, so using simple MC.' +
-                ' This usually happens when the Ntr is still small.'
-            )
-        return mean, std
+            if 'numFeat' in reg['regressor'].get_params().keys():
+                print('numFeat is', reg['regressor'].get_params()['numFeat'])
+            elif ('Lasso' in str(type(reg['regressor'])) and
+                'coef_' in reg['regressor'].__dict__.keys()):
+                print('numFeat is', len(np.where(reg['regressor'].coef_ != 0)[0]))
+
+        return reg
     
-    def __compute_estimates__(self):
-        Ntr = len(self.ytr)
-        self.Ns.append(Ntr)
+    def get_estimates(self, Xtrain, ytrain, Xtest):
+        '''
+        Compute LMC estimators.
+        Inputs are all np.arrays.
+        '''
+        self.Xte_ = Xtest
+        self.Xtr_ = Xtrain
+        self.ytr_ = ytrain
+        N = len(self.ytr_)
+
+        assert self.Xtr_.shape[1] == self.Xte_.shape[1]
+        assert self.Xtr_.shape[0] == self.ytr_.shape[0]
+        
+        self.__print_num_samples__()
         
         starttime = time.time()
         
-        # MC estimates.
-        self.meanMCs.append(self.ytr.mean())
-        self.stdMCs.append(self.ytr.std(ddof=1))
-        
-        # LassoMC estimates.
-        self.__train_regressor__()
-        if (self.validation_method == '5Fold' or
-            self.validation_method == 'split'):
-            # In these cases, another new regressor regloc will be trained. If the self.reg regressor
-            # is LassoCV or RidgeCV, then use simple Lasso/Ridge with the optimal alpha,
-            # rather than redoing the costly CV method.
-            if 'LassoCV' in str(type(self.reg['regressor'])):
-                # We fit a Lasso model with the alpha chosen from our CV earlier.
-                if self.verbose:
-                    print('Using a normal Lasso model with the optimal alpha chosen by LassoCV')
-                regloc = Pipeline([('scaler', self.reg['scaler']),
-                                   ('regressor',
-                                    Lasso(alpha = self.reg['regressor'].alpha_, max_iter = 10**4))])
-            elif 'RidgeCV' in str(type(self.reg['regressor'])):
-                # We fit a Ridge model with the alpha chosen from our CV earlier.
-                if self.verbose:
-                    print('Using a normal Ridge model with the optimal alpha chosen by RidgeCV')
-                regloc = Pipeline([('scaler', self.reg['scaler']),
-                                   ('regressor',
-                                    Ridge(alpha = self.reg['regressor'].alpha_))])
-            else:
-                # If regressor was not a CV method, simply take the regressor as it is.
-                regloc = self.reg
+        # MC estimates:
+        meanMC = self.ytr_.mean()
+        varMC = self.ytr_.var(ddof=1)
+        if varMC == 0:
+            return meanMC, varMC, meanMC, varMC, np.zeros(2), np.zeros(2), np.zeros(2)
+
+        m4MC = m4(self.ytr_)
+        errorsMC = np.array([np.sqrt(varMC / N),
+                             np.sqrt(m4MC - (N-3)/(N-1) * varMC**2) / np.sqrt(N)])
+
+        # Scale data, to make ML methods work better:
+        self.ytr_ = (self.ytr_ - meanMC) / np.sqrt(varMC)
+            
+        # Select optimal regularisation parameter alpha:
+        if ((self.splitting_method_ == 'Nfold')
+            and
+            ('LassoCV' in str(type(self.reg_['regressor'])))):
+            # In this case, Nfold models will be trained. If self.reg is LassoCV,
+            # running the CV Nfold times will be very slow. Instead, we first train once to
+            # find the optimal regularisation parameter alpha. Then, for the Nfold models
+            # we will train normal Lasso models with the fixed alpha parameter.
+            # In this way the expensive CV is only run once.
+            self.reg_ = self.__train_regressor__(self.reg_, self.Xtr_, self.ytr_)
+            regloc = Pipeline([('scaler', self.reg_['scaler']),
+                               ('regressor',
+                                Lasso(alpha = self.reg_['regressor'].alpha_, max_iter = 10**4))])
+            if self.verbose_:
+                print('Using a normal Lasso model with the' +
+                      ' optimal alpha chosen by LassoCV')
+        else:
+            # If regressor was not a CV method, simply take the regressor as it is.
+            regloc = self.reg_
                 
         # Now get the estimates:
-        if self.validation_method == '5Fold':
-            n_splits = self.Nfold if self.Nfold <= Ntr/2 else Ntr//2
-            self.meanLMCs.append(0.0)
-            self.stdLMCs.append(0.0)
-            if self.verbose:
-                print('Using ' + str(n_splits) + 'Fold estimation...')
-            kf = KFold(n_splits = n_splits)
-            for idxtr, idxval in kf.split(self.Xtr):
-                Xtr, Xval = self.Xtr[idxtr], self.Xtr[idxval]
-                ytr, self.yval = self.ytr[idxtr], self.ytr[idxval]
-                mu = ytr.mean()
-                sig = ytr.std()
-                    
-                if 'random_state' in regloc['regressor'].get_params().keys():
-                    regloc['regressor'].set_params(**{'random_state' : self.__get_rs__()})
-                    
-                regloc.fit(Xtr, (ytr - mu) / sig)  # Fit with normalised output.
+        if self.splitting_method_ == 'Nfold':
+            n_split = self.Nfold_ if self.Nfold_ <= N/2 else N//2
+            meanLMC = 0.0
+            varLMC = 0.0
+            errorsLMC_mean = np.zeros(2)
+            errorsLMC_var = np.zeros(2)
+            if self.verbose_:
+                print('Using ' + str(n_split) + 'Fold estimation...')
+            kf = KFold(n_splits = n_split)
+            for idxtr, idxpred in kf.split(self.Xtr_):
+                Xtr, Xpred = self.Xtr_[idxtr], self.Xtr_[idxpred]
+                ytr, ytrue = self.ytr_[idxtr], self.ytr_[idxpred]
+                regloc = self.__train_regressor__(regloc, Xtr, ytr)
                 
-                self.yvalpred = regloc.predict(Xval) * sig + mu
-                self.ytestpred = regloc.predict(self.Xtest) * sig + mu
+                ypred = regloc.predict(Xpred)
+                fullypred = regloc.predict(self.Xte_)
 
-                mean,std = self.__2LMC__(self.ytestpred, self.yval, self.yvalpred, regloc)
-                self.meanLMCs[-1] += mean
-                self.stdLMCs[-1] += std**2  # Compute mean of variances, and do sqrt in the end. The variance estimators are unbiased, not the std estimators.
+                mean, var, mean_es, var_es = self.__2LMC__(fullypred,
+                                                           ytrue, ypred,
+                                                           use_alpha = self.use_alpha_)
+                var = var if var > 0.0 else 1.0  # If statistics are poor, 2LMC could yield negative var.
+                meanLMC += mean
+                varLMC += var
+                errorsLMC_mean += mean_es
+                errorsLMC_var += var_es
 
-            self.meanLMCs[-1] /= n_splits
-            # self.stdLMCs[-1] /= n_splits
-            self.stdLMCs[-1] = np.sqrt(self.stdLMCs[-1] / n_splits)
+            meanLMC /= n_split
+            varLMC /= n_split
 
-        elif self.validation_method == 'bootstrap':
-            # Generate bootstrapped validation set.
-            mu = self.meanMCs[-1]
-            sig = self.stdMCs[-1]
-            np.random.seed(self.__get_rs__())
-            idxs = np.random.choice(Ntr, Ntr, replace = True)
-            self.yval = self.ytr[idxs]
-            self.yvalpred = self.reg.predict(self.Xtr[idxs]) * sig + mu
-
-            # Get estimates.
-            self.ytestpred = self.reg.predict(self.Xtest) * sig + mu
-            mean, std = self.__2LMC__(self.ytestpred, self.yval, self.yvalpred, self.reg)
-            self.meanLMCs.append(mean)
-            self.stdLMCs.append(std)
+            # The first part of the LMC error is the average error of the Nfold trials.
+            # Thus we divide by n_split.
+            # However, the second part of the LMC error is the average error divided by the number of folds. (See LMC paper).
+            errorsLMC_mean[0] /= n_split
+            errorsLMC_var[0] /= n_split
+            errorsLMC_mean[1] /= n_split**2
+            errorsLMC_var[1] /= n_split**2
             
-        elif self.validation_method == 'split':
-            Xtr, Xval, ytr, self.yval = train_test_split(self.Xtr, self.ytr,
-                                                         test_size = 0.2,
-                                                         random_state = self.__get_rs__())
-            if self.verbose:
-                print('Splitting Xtr into', Xtr.shape[0], 'training samples, and',
-                      Xval.shape[0], 'validation samples.')
-            mu = ytr.mean()
-            sig = ytr.std(ddof = 1)
-            regloc.fit(Xtr, (ytr - mu) / sig)  # Fit with normalised output.
 
-            # Generate validation set.
-            self.yvalpred = regloc.predict(Xval) * sig + mu
-            self.ytestpred = regloc.predict(self.Xtest) * sig + mu
-            mean,std = self.__2LMC__(self.ytestpred, self.yval, self.yvalpred, regloc)
-            self.meanLMCs.append(mean)
-            self.stdLMCs.append(std)
+        elif self.splitting_method_ == 'none':
+            # Get estimates.
+            regloc = self.__train_regressor__(regloc, self.Xtr_, self.ytr_)
+            
+            fullypred = regloc.predict(self.Xte_)
+            ypred = regloc.predict(self.Xtr_)
+            meanLMC, varLMC, errorsLMC_mean, errorsLMC_var = self.__2LMC__(fullypred,
+                                                                     self.ytr_, ypred,
+                                                                     use_alpha = self.use_alpha_)
+            
+        elif self.splitting_method_ == 'split':
+            Xtr, Xpred, ytr, ytrue = train_test_split(self.Xtr_, self.ytr_,
+                                                      train_size = self.split_train_percent_ / 100,
+                                                      random_state = self.__get_rs__())
+            if self.verbose_:
+                print('Splitting Xtr into', Xtr.shape[0], 'training samples, and',
+                      Xpred.shape[0], 'validation samples.')
+            regloc = self.__train_regressor__(regloc, Xtr, ytr)
+            
+            fullypred = regloc.predict(self.Xte_)
+            ypred = regloc.predict(Xpred)
+            meanLMC, varLMC, errorsLMC_mean, errorsLMC_var = self.__2LMC__(fullypred,
+                                                                     ytrue, ypred,
+                                                                     use_alpha = self.use_alpha_)
             
         else:
-            print('Error, unknown validation method')
+            print('Error, unknown splitting method.')
             return 1
 
+        # Inversely scale the estimations.
+        meanLMC = meanLMC * np.sqrt(varMC) + meanMC
+        varLMC = varLMC * varMC if varLMC > 0.0 else varMC  # If statistics are poor, 2LMC could yield negative var.
+        errorsLMC_mean = varMC * errorsLMC_mean  # Errors on mean.
+        errorsLMC_var= varMC**2 * errorsLMC_var  # Errors on var
+        
         totaltime = time.time() - starttime
-        if self.verbose:
-            print('It took', totaltime, 'seconds to get the estimates.')
-        self.timings.append(totaltime)
-        
-        if self.verbose and (
-                self.validation_method == '5Fold' or
-                self.validation_method == 'split'):
-            if 'numFeat' in regloc['regressor'].get_params().keys():
-                print('numFeat is', regloc['regressor'].get_params()['numFeat'])
-            if ('Lasso' in str(type(regloc['regressor'])) and
-                'coef_' in regloc['regressor'].__dict__.keys()):
-                print('numFeat is', len(np.where(regloc['regressor'].coef_ != 0)[0]))
+        if self.verbose_:
+            print('It took {:.2e} seconds to get the estimates.'.format(totaltime))
+            print('MC estimates: {:.3e}, {:.3e}'.format(meanMC, varMC))
+            print('with estimated MC errors:', errorsMC)
+            print('LMC estimates: {:.3e}, {:.3e}'.format(meanLMC, varLMC))
+            print('with estimated LMC errors: {:.3e}, {:.3e}'.format(np.sqrt(errorsLMC_mean.sum()),
+                  np.sqrt(errorsLMC_var.sum())))
+            print('Furthermore, the two parts of the LMC_mean MSE:', errorsLMC_mean)
+            print('and the two parts of the LMC_var MSE:', errorsLMC_var)
 
-    def __print_num_samples__(self):
-        if self.verbose:
-            self.__print_warning__(
-                'Ntr = ' + str(len(self.ytr)) + 
-                ' labelled samples, Ntest = ' +
-                str(self.Xtest.shape[0]) + 
-                ' unlabelled samples.',
-                color = 32)
+        return meanMC, varMC, meanLMC, varLMC, errorsMC, errorsLMC_mean, errorsLMC_var
 
-    def __print_warning__(self, text, color = 33):
-        # 30 = black, 31 = red, 32 = green, 33 = yellow, 34 = blue, 35 = magenta, 36 = cyan, 37 = white
-        print("\033[1;" + str(color) + "m" + text + "\033[m")
-    
-    def MC_and_LMC(self, Nincr = 5, Nmin = 50, Nmax = 10**3, Nwarmup = (7,40),
-                   checkMC = True, checkLassoMC = True):
-        '''
-        Method that does the MC and LMC convergence.
-        At each pass of a loop it runs Nincr simulations (i.e. it gets Nincr (x,y) pairs).
-        Then it computes the MC and LMC estimates.
-        Once N > Nmin it starts checking if MC and LMC have converged.
-        If N > Nmax it stops even if it hasn't converged.
-        Nwarmup gives the initial number of samples for training (x,y pairs) and validation (just x)
-        The checkMC and checkLassoMC booleans say which algorithms to check for convergence. This is in case you want to stop if just MC or just LMC has converged, but not the other.
-        '''
-        
-        # Get initial samples.
-        self.__get_warmup_samples__(Nwarmup[0], Nwarmup[1])
-        self.__print_num_samples__()
-        self.__compute_estimates__()
-
-        # Increase labelled samples by Nincr until convergence of MC and LMC.
-        conv = 0
-        while not conv:
-            self.__get_more_samples__(Nincr,0)
-            self.__print_num_samples__()
-            self.__compute_estimates__()
-            # Check convergence only after Nmin samples have been obtained.
-            if self.Ns[-1] > Nmin:
-                conv = self.__test_convergence__(checkMC, checkLassoMC)
-            # Quit if N becomes huge.
-            if self.Ns[-1] + Nincr > Nmax:
-                self.__print_warning__('\n\nQUITTING before convergence, because N > ' + str(Nmax))
-                break
-
-        # Print final state.
-        self.__print_warning__("\nFinished with", color = 32)
-        self.verbose = 1  # Such that final statement gets printed.
-        self.__print_num_samples__()
-        self.__test_convergence__()
-
-    def get_bootstrap_estimates(self, Xtrain, ytrain, Xtest, Nrep = 5):
-        Ntr = Xtrain.shape[0]
-        self.Xtest = Xtest
-
-        for i in range(Nrep):
-            if self.verbose:
-                print('\nBootstrap repetition', i+1)
-                
-            np.random.seed(self.__get_rs__())
-            idxs = np.random.choice(Ntr, Ntr, replace = True)
-            self.Xtr = Xtrain[idxs,:]
-            self.ytr = ytrain[idxs]
-            self.__print_num_samples__()
-            self.__compute_estimates__()
-
-            if self.verbose:
-                print('MC estimates:', self.meanMCs[-1], self.stdMCs[-1])
-                print('LassoMC estimates:', self.meanLMCs[-1], self.stdLMCs[-1])
-
-        meanMC = [np.mean(self.meanMCs[-Nrep:]), np.std(self.meanMCs[-Nrep:])]
-        stdMC = [np.mean(self.stdMCs[-Nrep:]), np.std(self.stdMCs[-Nrep:])]
-        meanLMC = [np.mean(self.meanLMCs[-Nrep:]), np.std(self.meanLMCs[-Nrep:])]
-        stdLMC = [np.mean(self.stdLMCs[-Nrep:]), np.std(self.stdLMCs[-Nrep:])]
-                
-        return meanMC, stdMC, meanLMC, stdLMC
-
-    def get_single_estimate(self, Xtrain, ytrain, Xtest):
-        Ntr = Xtrain.shape[0]
-        self.Xtest = Xtest
-        self.Xtr = Xtrain
-        self.ytr = ytrain
-        
-        self.__print_num_samples__()
-        self.__compute_estimates__()
-        meanMC, stdMC = self.meanMCs[-1], self.stdMCs[-1]
-        meanLMC, stdLMC = self.meanLMCs[-1], self.stdLMCs[-1]
-        
-        if self.verbose:
-            print('MC estimates:', meanMC, "+-", stdMC)
-            print('LMC estimates:', meanLMC, "+-", stdLMC)
-
-        return meanMC, stdMC, meanLMC, stdLMC
