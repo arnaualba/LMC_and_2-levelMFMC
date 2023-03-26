@@ -267,7 +267,7 @@ class LMC():
         meanLMC = meanLMC * np.sqrt(varMC) + meanMC
         varLMC = varLMC * varMC if varLMC > 0.0 else varMC  # If statistics are poor, 2LMC could yield negative var.
         errorsLMC_mean = varMC * errorsLMC_mean  # Errors on mean.
-        errorsLMC_var= varMC**2 * errorsLMC_var  # Errors on var
+        errorsLMC_var= varMC**2 * errorsLMC_var  # Errors on var.
         
         totaltime = time.time() - starttime
         if self.verbose_:
