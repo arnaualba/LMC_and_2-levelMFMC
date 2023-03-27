@@ -98,9 +98,10 @@ class LMC():
             numerator = m22(ypred, ytrue) - varpred * vartrue + 2/(N+1)*cov**2
             alpha_var = np.sqrt(numerator /
                                 (m4pred - varpred**2 + 2/(N+1)*varpred**2)) if numerator > 0 else 0.0
-            self.__print_warning__('Coefs for control variates: alpha_mean = ' +
-                                   '{:.2f}, and alpha_var = {:.2f}'.format(alpha_mean,
-                                                                           alpha_var), color = 34)
+            if self.verbose_:
+                self.__print_warning__('Coefs for control variates: alpha_mean = ' +
+                                       '{:.2f}, and alpha_var = {:.2f}'.format(alpha_mean,
+                                                                               alpha_var), color = 34)
         else:
             alpha_mean, alpha_var = 1.0, 1.0  # Equivalent to not choosing alphas.
 
@@ -119,7 +120,7 @@ class LMC():
         var_errors[1] = (m22(ytrue + alpha_var*ypred, ytrue - alpha_var*ypred) +
                          1/(N-1)*np.var(ytrue + alpha_var*ypred, ddof=1)*np.var(ytrue - alpha_var*ypred, ddof=1) -
                          (N-2)/(N-1)*(vartrue - alpha_var**2*varpred)**2) / N  # Second part of 2LMC error.
-        return mean, var, mean_errors, var_errors
+        return mean, var, mean_errors, var_errors, alpha_mean, alpha_var
 
     def __train_regressor__(self, reg, Xtr, ytr):
         '''
@@ -202,6 +203,8 @@ class LMC():
             varLMC = 0.0
             MSE_LMC_mean = np.zeros(2)
             MSE_LMC_var = np.zeros(2)
+            alpha_mean = 0.0
+            alpha_var = 0.0
             if self.verbose_:
                 print('Using ' + str(n_split) + 'Fold estimation...')
             kf = KFold(n_splits = n_split)
@@ -213,17 +216,21 @@ class LMC():
                 ypred = regloc.predict(Xpred)
                 fullypred = regloc.predict(self.Xte_)
 
-                mean, var, mean_es, var_es = self.__2LMC__(fullypred,
-                                                           ytrue, ypred,
-                                                           use_alpha = self.use_alpha_)
+                mean, var, mean_es, var_es, am, av = self.__2LMC__(fullypred,
+                                                                   ytrue, ypred,
+                                                                   use_alpha = self.use_alpha_)
                 var = var if var > 0.0 else 1.0  # If statistics are poor, 2LMC could yield negative var.
                 meanLMC += mean
                 varLMC += var
                 MSE_LMC_mean += mean_es
                 MSE_LMC_var += var_es
+                alpha_mean += am
+                alpha_var += av
 
             meanLMC /= n_split
             varLMC /= n_split
+            alpha_mean /= n_split
+            alpha_var /= n_split
 
             # The first part of the LMC error is the average error of the Nfold trials.
             # Thus we divide by n_split.
@@ -240,9 +247,9 @@ class LMC():
             
             fullypred = regloc.predict(self.Xte_)
             ypred = regloc.predict(self.Xtr_)
-            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var = self.__2LMC__(fullypred,
-                                                                     self.ytr_, ypred,
-                                                                     use_alpha = self.use_alpha_)
+            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var, alpha_mean, alpha_var = self.__2LMC__(fullypred,
+                                                                                              self.ytr_, ypred,
+                                                                                              use_alpha = self.use_alpha_)
             
         elif self.splitting_method_ == 'split':
             Xtr, Xpred, ytr, ytrue = train_test_split(self.Xtr_, self.ytr_,
@@ -255,9 +262,9 @@ class LMC():
             
             fullypred = regloc.predict(self.Xte_)
             ypred = regloc.predict(Xpred)
-            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var = self.__2LMC__(fullypred,
-                                                                     ytrue, ypred,
-                                                                     use_alpha = self.use_alpha_)
+            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var, alpha_mean, alpha_var = self.__2LMC__(fullypred,
+                                                                                              ytrue, ypred,
+                                                                                              use_alpha = self.use_alpha_)
             
         else:
             print('Error, unknown splitting method.')
@@ -280,6 +287,7 @@ class LMC():
             print('Furthermore, the two parts of the LMC_mean MSE:', MSE_LMC_mean)
             print('and the two parts of the LMC_var MSE:', MSE_LMC_var)
 
+        # Prepare dictionary with main results:
         results = {'meanMC' : meanMC,
                    'varMC' : varMC,
                    'meanLMC' : meanLMC,
@@ -289,5 +297,19 @@ class LMC():
                    'MSE_LMC_mean' : MSE_LMC_mean,
                    'MSE_LMC_var' : MSE_LMC_var,
                    }
+        
+        # Add other info to the dictionary:
+        attrs = dir(regloc['regressor'])
+        if 'alpha' in attrs:
+            results['regularisation_parameter'] = regloc['regressor'].alpha  # This parameter is 'lambda' in the paper.
+        elif 'alpha_' in attrs:
+            results['regularisation_parameter'] = regloc['regressor'].alpha_
+        if 'coef_' in attrs:
+            results['regression_coefs'] = regloc['regressor'].coef_
+        if self.use_alpha_:
+            # Coefficients from control variates.
+            results['alpha_mean'] = alpha_mean
+            results['alpha_var'] = alpha_var
+        
         return results
 

@@ -43,14 +43,14 @@ print("True var is {:.2e}".format(truevar))
 
 # Test increasing dataset size.
 lmc = LMC(regressor = Lasso(alpha = 0.002, max_iter = 10**4),
-          random_state = np.random.randint(1000), verbose = True, 
+          random_state = np.random.randint(1000), verbose = False, 
           splitting_method = 'Nfold', use_alpha = False)
 lmc_alpha = LMC(regressor = Lasso(alpha = 0.002, max_iter = 10**4),
-                random_state = np.random.randint(1000), verbose = True, 
+                random_state = np.random.randint(1000), verbose = False, 
                 splitting_method = 'Nfold', use_alpha = True)
 
 Ns = np.logspace(1,3, num = 10)
-print(Ns)
+print('Ns:', Ns)
 Nrep = 15
 meanMCs = np.zeros((Nrep, len(Ns)))
 varMCs = np.zeros((Nrep, len(Ns)))
@@ -61,18 +61,23 @@ varLMCs_withAlpha = np.zeros((Nrep, len(Ns)))
 M = 10**5
 
 for rep in range(Nrep):
+    print()
+    print("Repetition", rep)
     for i,N in enumerate(Ns):
+        print("N =", N)
         Xtr = np.random.rand(int(np.floor(N)),dim)
         ytr = np.dot(Xtr,m) + eps * np.random.randn(Xtr.shape[0])  # Linear model with noise.
         Xte = np.random.rand(M,dim)
 
         results = lmc.get_estimates(Xtr,ytr,Xte)
-        print(results.keys())
         meanMCs[rep,i], varMCs[rep,i] = results['meanMC'], results['varMC']
         meanLMCs[rep,i], varLMCs[rep,i] = results['meanLMC'], results['varLMC']
+        print("Regularisation parameter lambda:", results['regularisation_parameter'])
+        print('numFeat is', len(np.where(results['regression_coefs'] != 0)[0]))
         
         results = lmc_alpha.get_estimates(Xtr,ytr,Xte)
         meanLMCs_withAlpha[rep,i], varLMCs_withAlpha[rep,i] = results['meanLMC'], results['varLMC']
+        print('alphas: {:.2f}, {:.2f}'.format(results['alpha_mean'], results['alpha_var']))
 
 fig1, axs = plt.subplots(1,2,figsize = (14,5))
 axs = axs.reshape(-1)
