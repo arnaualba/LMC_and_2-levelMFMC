@@ -51,7 +51,7 @@ lmc_alpha = LMC(regressor = Lasso(alpha = 0.002, max_iter = 10**4),
 
 Ns = np.logspace(1,3, num = 10)
 print(Ns)
-Nrep = 2
+Nrep = 15
 meanMCs = np.zeros((Nrep, len(Ns)))
 varMCs = np.zeros((Nrep, len(Ns)))
 meanLMCs = np.zeros((Nrep, len(Ns)))
@@ -65,13 +65,15 @@ for rep in range(Nrep):
         Xtr = np.random.rand(int(np.floor(N)),dim)
         ytr = np.dot(Xtr,m) + eps * np.random.randn(Xtr.shape[0])  # Linear model with noise.
         Xte = np.random.rand(M,dim)
+
+        results = lmc.get_estimates(Xtr,ytr,Xte)
+        print(results.keys())
+        meanMCs[rep,i], varMCs[rep,i] = results['meanMC'], results['varMC']
+        meanLMCs[rep,i], varLMCs[rep,i] = results['meanLMC'], results['varLMC']
         
-        meanMCs[rep,i], varMCs[rep,i], meanLMCs[rep,i], varLMCs[rep,i], _,_,_ = lmc.get_estimates(Xtr,
-                                                                                                  ytr,
-                                                                                                  Xte)
-        _,_, meanLMCs_withAlpha[rep,i], varLMCs_withAlpha[rep,i], _,_,_ = lmc_alpha.get_estimates(Xtr,
-                                                                                                  ytr,
-                                                                                                  Xte)
+        results = lmc_alpha.get_estimates(Xtr,ytr,Xte)
+        meanLMCs_withAlpha[rep,i], varLMCs_withAlpha[rep,i] = results['meanLMC'], results['varLMC']
+
 fig1, axs = plt.subplots(1,2,figsize = (14,5))
 axs = axs.reshape(-1)
 fig1.subplots_adjust(wspace = .26)

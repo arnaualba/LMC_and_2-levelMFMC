@@ -200,8 +200,8 @@ class LMC():
             n_split = self.Nfold_ if self.Nfold_ <= N/2 else N//2
             meanLMC = 0.0
             varLMC = 0.0
-            errorsLMC_mean = np.zeros(2)
-            errorsLMC_var = np.zeros(2)
+            MSE_LMC_mean = np.zeros(2)
+            MSE_LMC_var = np.zeros(2)
             if self.verbose_:
                 print('Using ' + str(n_split) + 'Fold estimation...')
             kf = KFold(n_splits = n_split)
@@ -219,8 +219,8 @@ class LMC():
                 var = var if var > 0.0 else 1.0  # If statistics are poor, 2LMC could yield negative var.
                 meanLMC += mean
                 varLMC += var
-                errorsLMC_mean += mean_es
-                errorsLMC_var += var_es
+                MSE_LMC_mean += mean_es
+                MSE_LMC_var += var_es
 
             meanLMC /= n_split
             varLMC /= n_split
@@ -228,10 +228,10 @@ class LMC():
             # The first part of the LMC error is the average error of the Nfold trials.
             # Thus we divide by n_split.
             # However, the second part of the LMC error is the average error divided by the number of folds. (See LMC paper).
-            errorsLMC_mean[0] /= n_split
-            errorsLMC_var[0] /= n_split
-            errorsLMC_mean[1] /= n_split**2
-            errorsLMC_var[1] /= n_split**2
+            MSE_LMC_mean[0] /= n_split
+            MSE_LMC_var[0] /= n_split
+            MSE_LMC_mean[1] /= n_split**2
+            MSE_LMC_var[1] /= n_split**2
             
 
         elif self.splitting_method_ == 'none':
@@ -240,7 +240,7 @@ class LMC():
             
             fullypred = regloc.predict(self.Xte_)
             ypred = regloc.predict(self.Xtr_)
-            meanLMC, varLMC, errorsLMC_mean, errorsLMC_var = self.__2LMC__(fullypred,
+            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var = self.__2LMC__(fullypred,
                                                                      self.ytr_, ypred,
                                                                      use_alpha = self.use_alpha_)
             
@@ -255,7 +255,7 @@ class LMC():
             
             fullypred = regloc.predict(self.Xte_)
             ypred = regloc.predict(Xpred)
-            meanLMC, varLMC, errorsLMC_mean, errorsLMC_var = self.__2LMC__(fullypred,
+            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var = self.__2LMC__(fullypred,
                                                                      ytrue, ypred,
                                                                      use_alpha = self.use_alpha_)
             
@@ -266,8 +266,8 @@ class LMC():
         # Inversely scale the estimations.
         meanLMC = meanLMC * np.sqrt(varMC) + meanMC
         varLMC = varLMC * varMC if varLMC > 0.0 else varMC  # If statistics are poor, 2LMC could yield negative var.
-        errorsLMC_mean = varMC * errorsLMC_mean  # Errors on mean.
-        errorsLMC_var= varMC**2 * errorsLMC_var  # Errors on var.
+        MSE_LMC_mean = varMC * MSE_LMC_mean  # Errors on mean.
+        MSE_LMC_var= varMC**2 * MSE_LMC_var  # Errors on var.
         
         totaltime = time.time() - starttime
         if self.verbose_:
@@ -275,10 +275,19 @@ class LMC():
             print('MC estimates: {:.3e}, {:.3e}'.format(meanMC, varMC))
             print('with estimated MC errors:', errorsMC)
             print('LMC estimates: {:.3e}, {:.3e}'.format(meanLMC, varLMC))
-            print('with estimated LMC errors: {:.3e}, {:.3e}'.format(np.sqrt(errorsLMC_mean.sum()),
-                  np.sqrt(errorsLMC_var.sum())))
-            print('Furthermore, the two parts of the LMC_mean MSE:', errorsLMC_mean)
-            print('and the two parts of the LMC_var MSE:', errorsLMC_var)
+            print('with estimated LMC errors: {:.3e}, {:.3e}'.format(np.sqrt(MSE_LMC_mean.sum()),
+                  np.sqrt(MSE_LMC_var.sum())))
+            print('Furthermore, the two parts of the LMC_mean MSE:', MSE_LMC_mean)
+            print('and the two parts of the LMC_var MSE:', MSE_LMC_var)
 
-        return meanMC, varMC, meanLMC, varLMC, errorsMC, errorsLMC_mean, errorsLMC_var
+        results = {'meanMC' : meanMC,
+                   'varMC' : varMC,
+                   'meanLMC' : meanLMC,
+                   'varLMC' : varLMC,
+                   'errorMC_mean' : errorsMC[0],
+                   'errorMC_var' : errorsMC[1],
+                   'MSE_LMC_mean' : MSE_LMC_mean,
+                   'MSE_LMC_var' : MSE_LMC_var,
+                   }
+        return results
 
