@@ -65,7 +65,7 @@ class LMC():
         if self.verbose_:
             self.__print_warning__(
                 'N = ' + str(len(self.ytr_)) + ' labelled samples, M = ' +
-                str(self.Xte_.shape[0]) + ' unlabelled samples, and ' +
+                str(self.Xte_.shape[0]) + ' unlabelled samples, and dim = ' +
                 str(self.Xtr_.shape[1]) + ' input dimensions.',
                 color = 32)
 
@@ -99,9 +99,9 @@ class LMC():
             alpha_var = np.sqrt(numerator /
                                 (m4pred - varpred**2 + 2/(N+1)*varpred**2)) if numerator > 0 else 0.0
             if self.verbose_:
-                self.__print_warning__('Coefs for control variates: alpha_mean = ' +
-                                       '{:.2f}, and alpha_var = {:.2f}'.format(alpha_mean,
-                                                                               alpha_var), color = 34)
+                print('Coefs for control variates: alpha_mean = ' +
+                      '{:.2f}, and alpha_var = {:.2f}'.format(alpha_mean,
+                                                              alpha_var))
         else:
             alpha_mean, alpha_var = 1.0, 1.0  # Equivalent to not choosing alphas.
 
@@ -279,13 +279,30 @@ class LMC():
         totaltime = time.time() - starttime
         if self.verbose_:
             print('It took {:.2e} seconds to get the estimates.'.format(totaltime))
-            print('MC estimates: {:.3e}, {:.3e}'.format(meanMC, varMC))
-            print('with estimated MC errors:', errorsMC)
-            print('LMC estimates: {:.3e}, {:.3e}'.format(meanLMC, varLMC))
-            print('with estimated LMC errors: {:.3e}, {:.3e}'.format(np.sqrt(MSE_LMC_mean.sum()),
-                  np.sqrt(MSE_LMC_var.sum())))
-            print('Furthermore, the two parts of the LMC_mean MSE:', MSE_LMC_mean)
-            print('and the two parts of the LMC_var MSE:', MSE_LMC_var)
+            self.__print_warning__('MC estimates: {:.3e}, {:.3e}'.format(meanMC, varMC))
+            self.__print_warning__('LMC estimates: {:.3e}, {:.3e}'.format(meanLMC, varLMC))
+            print('with estimated MC errors: {:.3e}, {:.3e}'.format(errorsMC[0], errorsMC[1]))
+            errorsLMC = [np.sqrt(MSE_LMC_mean.sum()), np.sqrt(MSE_LMC_var.sum())]
+            print('with estimated LMC errors: {:.3e}, {:.3e}'.format(errorsLMC[0], errorsLMC[1]))
+            error_ratios = [(errorsMC[0] - errorsLMC[0]) / errorsLMC[0], (errorsMC[1] - errorsLMC[1]) / errorsLMC[1]]
+            threshold = 0.05  # How different two relative errors need to be, in order for one estimate to be considered better than the other.
+            if error_ratios[0] > threshold and error_ratios[1] > threshold:
+                print('The LMC errors are smaller, so LMC is probably more accurate.')
+            elif error_ratios[0] < -threshold and error_ratios[1] < -threshold:
+                print('The MC errors are smaller, so MC is probably more accurate.')                
+            else:
+                print("The errors are similar, so it's not clear whether MC or LMC is more accurate.")
+            print('The two parts of the LMC mean MSE:', MSE_LMC_mean)
+            if MSE_LMC_mean[0] > MSE_LMC_mean[1]:
+                print('The first part of the LMC error is bigger. This error scales as 1/M.')
+            else:
+                print('The second part of the LMC error is bigger. This error scales as 1/N.')
+            print('The two parts of the LMC var MSE:', MSE_LMC_var)
+            if MSE_LMC_var[0] > MSE_LMC_var[1]:
+                print('The first part of the LMC error is bigger. This error scales as 1/M.')
+            else:
+                print('The second part of the LMC error is bigger. This error scales as 1/N.')
+
 
         # Prepare dictionary with main results:
         results = {'meanMC' : meanMC,
