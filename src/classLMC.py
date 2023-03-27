@@ -136,7 +136,7 @@ class LMC():
 
         if self.verbose_:
             if 'alphas' in reg['regressor'].get_params().keys():
-                print('optimal alpha is', reg['regressor'].alpha_)
+                print('optimal regularisation parameter lambda is {:.2e}'.format(reg['regressor'].alpha_))
                 
             if 'numFeat' in reg['regressor'].get_params().keys():
                 print('numFeat is', reg['regressor'].get_params()['numFeat'])
@@ -176,7 +176,7 @@ class LMC():
         # Scale data, to make ML methods work better:
         self.ytr_ = (self.ytr_ - meanMC) / np.sqrt(varMC)
             
-        # Select optimal regularisation parameter alpha:
+        # Select optimal regularisation parameter alpha (or lambda in the paper):
         if ((self.splitting_method_ == 'Nfold')
             and
             ('LassoCV' in str(type(self.reg_['regressor'])))):
@@ -191,7 +191,7 @@ class LMC():
                                 Lasso(alpha = self.reg_['regressor'].alpha_, max_iter = 10**4))])
             if self.verbose_:
                 print('Using a normal Lasso model with the' +
-                      ' optimal alpha chosen by LassoCV')
+                      ' optimal lambda chosen by LassoCV')
         else:
             # If regressor was not a CV method, simply take the regressor as it is.
             regloc = self.reg_
@@ -294,14 +294,14 @@ class LMC():
                 print("The errors are similar, so it's not clear whether MC or LMC is more accurate.")
             print('The two parts of the LMC mean MSE:', MSE_LMC_mean)
             if MSE_LMC_mean[0] > MSE_LMC_mean[1]:
-                print('The first part of the LMC error is bigger. This error scales as 1/M.')
+                print('The first part of the LMC MSE is bigger. This scales as 1/M.')
             else:
-                print('The second part of the LMC error is bigger. This error scales as 1/N.')
+                print('The second part of the LMC MSE is bigger. This scales as 1/N.')
             print('The two parts of the LMC var MSE:', MSE_LMC_var)
             if MSE_LMC_var[0] > MSE_LMC_var[1]:
-                print('The first part of the LMC error is bigger. This error scales as 1/M.')
+                print('The first part of the LMC MSE is bigger. This scales as 1/M.')
             else:
-                print('The second part of the LMC error is bigger. This error scales as 1/N.')
+                print('The second part of the LMC MSE is bigger. This scales as 1/N.')
 
 
         # Prepare dictionary with main results:
