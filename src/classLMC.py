@@ -106,8 +106,8 @@ class LMC():
             alpha_mean, alpha_var = 1.0, 1.0  # Equivalent to not choosing alphas.
 
         # Compute estimates:
-        mean = alpha_mean*fullypred.mean() + (ytrue - alpha_mean*ypred).mean()
-        var = alpha_var*fullypred.var(ddof=1) + ytrue.var(ddof=1) - alpha_var*ypred.var(ddof=1)
+        mean = alpha_mean * fullypred.mean() + (ytrue - alpha_mean * ypred).mean()
+        var = alpha_var**2 * fullypred.var(ddof=1) + ytrue.var(ddof=1) - alpha_var**2 * ypred.var(ddof=1)
 
         # Estimate error in calculations of mean:
         mean_errors = np.zeros(2)
