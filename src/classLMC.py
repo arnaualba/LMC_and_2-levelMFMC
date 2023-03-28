@@ -146,10 +146,21 @@ class LMC():
 
         return reg
     
-    def get_estimates(self, Xtrain, ytrain, Xtest):
+    def get_estimates(self, Xtrain, ytrain, Xtest, ytest_lowlevel = None, ytrain_lowlevel = None):
         '''
         Compute LMC estimators.
         Inputs are all np.arrays.
+        Xtrain : array of size (N,dim).
+        ytrain : array of size (N). It contains the high-level predictions of Xtrain.
+        Xtest : array of size (M,dim). It contains the unlabelled samples, with M >> N.
+        If the previous arguments are provided, the LMC algorithm will be run. I.e. the necessary
+        surrogate models will be trained, used to label Xtrain and Xtest, and compute the two-level
+        estimators (2LMC).
+
+        If both of the two following arguments are provided, then there is no need to train any surrogate
+        model. Only the 2LMC estimators will be computed.
+        ytest_lowlevel : array of size (M). Corresponds to low-level predictions of Xtest.
+        ytrain_lowlevel : array of size (N). Corresponds to low-level predictions of Xtrain.
         '''
         self.Xte_ = Xtest
         self.Xtr_ = Xtrain
@@ -173,6 +184,36 @@ class LMC():
         errorsMC = np.array([np.sqrt(varMC / N),
                              np.sqrt(m4MC - (N-3)/(N-1) * varMC**2) / np.sqrt(N)])
 
+        # If low level predictions are provided, then we can do normal 2LMC, no need to train anything.
+        if ytest_lowlevel != None and ytrain_lowlevel != None:
+            print('Computing normal 2LMC, since samples from the low level model were provided;')
+            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var, alpha_mean, alpha_var = self.__2LMC__(ytest_lowlevel,
+                                                                                              self.ytr_, ytrain_lowlevel,
+                                                                                              use_alpha = self.use_alpha_)
+            # Prepare dictionary with main results:
+            results = {'meanMC' : meanMC,
+                       'varMC' : varMC,
+                       'meanLMC' : meanLMC,
+                       'varLMC' : varLMC,
+                       'errorMC_mean' : errorsMC[0],
+                       'errorMC_var' : errorsMC[1],
+                       'MSE_LMC_mean' : MSE_LMC_mean,
+                       'MSE_LMC_var' : MSE_LMC_var,
+                       'alpha_mean' : alpha_mean,
+                       'alpha_var' : alpha_var,
+                       }
+
+            if self.verbose_:
+                totaltime = time.time() - starttime
+                print('It took {:.2e} seconds to get the estimates.'.format(totaltime))
+                self.__print_warning__('MC estimates: {:.3e}, {:.3e}'.format(meanMC, varMC))
+                self.__print_warning__('LMC estimates: {:.3e}, {:.3e}'.format(meanLMC, varLMC))
+                print('with estimated MC errors: {:.3e}, {:.3e}'.format(errorsMC[0], errorsMC[1]))
+                errorsLMC = [np.sqrt(MSE_LMC_mean.sum()), np.sqrt(MSE_LMC_var.sum())]
+                print('with estimated LMC errors: {:.3e}, {:.3e}'.format(errorsLMC[0], errorsLMC[1]))
+
+            return results
+        
         # Scale data, to make ML methods work better:
         self.ytr_ = (self.ytr_ - meanMC) / np.sqrt(varMC)
             
