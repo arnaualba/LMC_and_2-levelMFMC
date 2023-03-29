@@ -146,7 +146,7 @@ class LMC():
 
         return reg
     
-    def get_estimates(self, Xtrain, ytrain, Xtest, ytest_lowlevel = None, ytrain_lowlevel = None):
+    def get_estimates(self, Xtrain, ytrain, Xtest, ytest_lowlevel = [], ytrain_lowlevel = []):
         '''
         Compute LMC estimators.
         Inputs are all np.arrays.
@@ -185,7 +185,7 @@ class LMC():
                              np.sqrt(m4MC - (N-3)/(N-1) * varMC**2) / np.sqrt(N)])
 
         # If low level predictions are provided, then we can do normal 2LMC, no need to train anything.
-        if ytest_lowlevel != None and ytrain_lowlevel != None:
+        if len(ytest_lowlevel) != 0 and len(ytrain_lowlevel) != 0:
             print('Computing normal 2LMC, since samples from the low level model were provided;')
             meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var, alpha_mean, alpha_var = self.__2LMC__(ytest_lowlevel,
                                                                                               self.ytr_, ytrain_lowlevel,
