@@ -33,14 +33,14 @@ class LMC():
             verbose : 1 or 0.
             splitting_method :  'none', 'split' or 'Nfold'. Determines how Xtrain is used for training and estimating.
                                 If 'none', Xtrain will be used for training and estimation.
-                                This approach uses all the data, bur risks overfitting on the training and introducing a bias in the estimation.
+                                This approach uses all the data, but risks overfitting on the training and introducing a bias in the estimation.
                                 If 'split', Xtr will be split into a training set of split_train_percent, and a set of 100-split_train_percent for estimating.
                                 This approach will have an unbiased estimation, but will have large variance due to the small training/estimation sets.
                                 If 'Nfold', Nfold models will be trained, each with (N-1)/N portion of the data, and Nfold estimations will be made, each with 1/N portion of the data.
                                 This approach is unbiased, and uses all the available data. 
             Nfold : Number of folds. Only used if splitting_method='Nfold'.
             split_train_percent : float in [0,100]. Percentage of data to use for training. Only used if splitting_method='split'
-            use_alpha : boolean. If true, an alpha parameter is ued for the control variates.
+            use_alpha : boolean. If true, an alpha parameter is used as control variate coefficient.
         """   
         self.reg_ = Pipeline([('scaler', StandardScaler()), ('regressor', regressor)])
         self.rs_ = np.random.RandomState(random_state)
@@ -158,7 +158,7 @@ class LMC():
         estimators (2LMC).
 
         If both of the two following arguments are provided, then there is no need to train any surrogate
-        model. Only the 2LMC estimators will be computed.
+        model. Only the two-level MC estimators will be computed.
         ytest_lowlevel : array of size (M). Corresponds to low-level predictions of Xtest.
         ytrain_lowlevel : array of size (N). Corresponds to low-level predictions of Xtrain.
         '''
