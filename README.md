@@ -31,10 +31,10 @@ results = lmc.get_estimates(Xtr,ytr,Xte)  # Xtr and ytr are the N labelled sampl
 ```
 
 with 
-- regressor : sklearn regressor to use. If not an sklearn class, it can be any regressor with 'fit', 'predict', and 'score' methods.
-- random_state : positive int. Seed for reproducible results.
-- verbose : 1 or 0.
-- splitting_method :  'none', 'split' or 'Nfold'. Determines how Xtrain is used for training and estimating.
+* regressor : sklearn regressor to use. If not an sklearn class, it can be any regressor with 'fit', 'predict', and 'score' methods.
+* random_state : positive int. Seed for reproducible results.
+* verbose : 1 or 0.
+* splitting_method :  'none', 'split' or 'Nfold'. Determines how Xtrain is used for training and estimating.
         * If 'none', Xtrain will be used for training and estimation.
         This approach uses all the data, but risks overfitting on the training and introducing a bias in the estimation.
         * If 'split', Xtr will be split into a training set of split_train_percent, and a set of 100-split_train_percent for estimating.
@@ -43,6 +43,6 @@ with
         * If 'Nfold', Nfold models will be trained, each with (N-1)/N portion of the data, and Nfold estimations will be made, each with 1/N portion of the data.
         This approach is unbiased, and uses all the available data. 
         This approach is in fact the "LMC" approach used in the paper, and it is the novel idea in the work.
-- Nfold : Number of folds. Only used if splitting_method='Nfold'.
-- split_train_percent : float in [0,100]. Percentage of data to use for training. Only used if splitting_method='split'
-- use_alpha : boolean. If true, an alpha parameter is used as control variate coefficient.
+* Nfold : Number of folds. Only used if splitting_method='Nfold'.
+* split_train_percent : float in [0,100]. Percentage of data to use for training. Only used if splitting_method='split'
+* use_alpha : boolean. If true, an alpha parameter is used as control variate coefficient.
