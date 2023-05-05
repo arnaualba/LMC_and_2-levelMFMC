@@ -35,12 +35,12 @@ with
 - random_state : positive int. Seed for reproducible results.
 - verbose : 1 or 0.
 - splitting_method :  'none', 'split' or 'Nfold'. Determines how Xtrain is used for training and estimating.
-        If 'none', Xtrain will be used for training and estimation.
+        * If 'none', Xtrain will be used for training and estimation.
         This approach uses all the data, but risks overfitting on the training and introducing a bias in the estimation.
-        If 'split', Xtr will be split into a training set of split_train_percent, and a set of 100-split_train_percent for estimating.
+        * If 'split', Xtr will be split into a training set of split_train_percent, and a set of 100-split_train_percent for estimating.
         This approach will have an unbiased estimation, but will have large variance due to the small training/estimation sets.
         This approach is a "normal" two-level MC estimator, with some data being used for training and some being used for estimations.
-        If 'Nfold', Nfold models will be trained, each with (N-1)/N portion of the data, and Nfold estimations will be made, each with 1/N portion of the data.
+        * If 'Nfold', Nfold models will be trained, each with (N-1)/N portion of the data, and Nfold estimations will be made, each with 1/N portion of the data.
         This approach is unbiased, and uses all the available data. 
         This approach is in fact the "LMC" approach used in the paper, and it is the novel idea in the work.
 - Nfold : Number of folds. Only used if splitting_method='Nfold'.
