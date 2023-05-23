@@ -1,3 +1,6 @@
+import numpy as np
+from sklearn.linear_model import lasso_path
+
 class LassoFixedN():
     '''
     Lasso model where alpha is tuned such that the number of nonzero coefs is N.
