@@ -39,7 +39,8 @@ class LMC():
                                 If 'Nfold', Nfold models will be trained, each with (N-1)/N portion of the data, and Nfold estimations will be made, each with 1/N portion of the data.
                                 This approach is unbiased, and uses all the available data. 
             Nfold : Number of folds. Only used if splitting_method='Nfold'.
-            split_train_percent : float in [0,100]. Percentage of data to use for training. Only used if splitting_method='split'
+            split_train_percent : float in [0,100], or 'adaptive'. Percentage of data to use for training. Only used if splitting_method='split'
+                                  If 'adaptive', it wi WIP
             use_alpha : boolean. If true, an alpha parameter is used as control variate coefficient.
         """   
         self.reg_ = Pipeline([('scaler', StandardScaler()), ('regressor', regressor)])
@@ -293,14 +294,41 @@ class LMC():
                                                                                               use_alpha = self.use_alpha_)
             
         elif self.splitting_method_ == 'split':
-            Xtr, Xpred, ytr, ytrue = train_test_split(self.Xtr_, self.ytr_,
-                                                      train_size = self.split_train_percent_ / 100,
-                                                      random_state = self.__get_rs__())
-            if self.verbose_:
-                print('Splitting Xtr into', Xtr.shape[0], 'training samples, and',
-                      Xpred.shape[0], 'validation samples.')
-            regloc = self.__train_regressor__(regloc, Xtr, ytr)
+            if (((type(self.split_train_percent_) is int) or (type(self.split_train_percent_) is float)) and
+                (self.split_train_percent_ > 0) and (self.split_train_percent_ < 100)):
+                Xtr, Xpred, ytr, ytrue = train_test_split(self.Xtr_, self.ytr_,
+                                                          train_size = self.split_train_percent_ / 100,
+                                                          random_state = self.__get_rs__())
+                if self.verbose_:
+                    print('Splitting Xtr into', Xtr.shape[0], 'training samples, and',
+                          Xpred.shape[0], 'validation samples.')
+
+            elif self.split_train_percent_ == 'adaptive':
+                N = len(self.ytr_)
+                if N < 10:
+                    print("Since N < 10 the adaptive search cannot be done. Using 80% for training instead.")
+                    percent_optim = 80
+                else:
+                    percents = np.arange(10,90,10)
+                    MSEs = np.zeros(len(percents))
+                    for i,percent in enumerate(percents):
+                        Xtr, Xval, ytr, yval = train_test_split(self.Xtr_, self.ytr_,
+                                                                  train_size = percent / 100,
+                                                                  random_state = self.__get_rs__())
+                        n = len(ytr)
+                        regloc = self.__train_regressor__(regloc, Xtr, ytr)
+                        yval_pred = regloc.predict(Xval)
+                        MSEs[i] = np.var(yval_pred - yval) / (N - n)
+                    percent_optim = percents[np.argmin(MSEs)]
+                    print("Optimal chosen split is {:.2f}%, which corresponds to n={:d}".format(percent_optim, int(percent_optim*N/100)))
+                Xtr, Xpred, ytr, ytrue = train_test_split(self.Xtr_, self.ytr_,
+                                                          train_size = percent_optim / 100,
+                                                          random_state = self.__get_rs__())
+            else:
+                print('Error, split_train_percent should be number in [0,100] or "adaptive"')
+                return 1
             
+            regloc = self.__train_regressor__(regloc, Xtr, ytr)
             fullypred = regloc.predict(self.Xte_)
             ypred = regloc.predict(Xpred)
             meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var, alpha_mean, alpha_var = self.__2LMC__(fullypred,

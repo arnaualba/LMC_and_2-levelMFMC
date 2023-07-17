@@ -48,16 +48,23 @@ lmc = LMC(regressor = Lasso(alpha = 0.002, max_iter = 10**4),
 lmc_alpha = LMC(regressor = Lasso(alpha = 0.002, max_iter = 10**4),
                 random_state = np.random.randint(1000), verbose = False, 
                 splitting_method = 'Nfold', use_alpha = True)
+# Adaptive MFMC
+AMF = LMC(regressor = Lasso(alpha = 0.002, max_iter = 10**4),
+          random_state = np.random.randint(1000), verbose = False, 
+          splitting_method = 'split', split_train_percent = 'adaptive',
+          use_alpha = False)
 
 Ns = np.logspace(1,3, num = 10)
 print('Ns:', Ns)
-Nrep = 15
+Nrep = 5
 meanMCs = np.zeros((Nrep, len(Ns)))
 varMCs = np.zeros((Nrep, len(Ns)))
 meanLMCs = np.zeros((Nrep, len(Ns)))
 varLMCs = np.zeros((Nrep, len(Ns)))
 meanLMCs_withAlpha = np.zeros((Nrep, len(Ns)))
 varLMCs_withAlpha = np.zeros((Nrep, len(Ns)))
+mean_AMFs = np.zeros((Nrep, len(Ns)))
+var_AMFs = np.zeros((Nrep, len(Ns)))
 M = 10**5
 
 for rep in range(Nrep):
@@ -79,6 +86,9 @@ for rep in range(Nrep):
         meanLMCs_withAlpha[rep,i], varLMCs_withAlpha[rep,i] = results['meanLMC'], results['varLMC']
         print('alphas: {:.2f}, {:.2f}'.format(results['alpha_mean'], results['alpha_var']))
 
+        results = AMF.get_estimates(Xtr,ytr,Xte)
+        mean_AMFs[rep,i], var_AMFs[rep,i] = results['meanLMC'], results['varLMC']
+
 fig1, axs = plt.subplots(1,2,figsize = (14,5))
 axs = axs.reshape(-1)
 fig1.subplots_adjust(wspace = .26)
@@ -88,6 +98,7 @@ for i in range(Nrep):
     axs[0].plot(x,meanMCs[i,:], color = 'blue', lw = 3)
     axs[0].plot(x,meanLMCs[i,:], color = 'darkorange', lw = 3)
     axs[0].plot(x,meanLMCs_withAlpha[i,:], color = 'green', lw = 3)
+    axs[0].plot(x,mean_AMFs[i,:], color = 'red', lw = 3)
 axs[0].set_ylabel('Estimation of mean', fontsize = fs)
 
 axs[1].axhline(truevar, color = 'k', ls = '--', lw = 4)
@@ -95,8 +106,9 @@ for i in range(Nrep):
     axs[1].plot(x, varMCs[i,:], color = 'blue', lw = 3)
     axs[1].plot(x, varLMCs[i,:], color = 'darkorange', lw = 3, ls = '-')
     axs[1].plot(x, varLMCs_withAlpha[i,:], color = 'green', lw = 3)
+    axs[1].plot(x, var_AMFs[i,:], color = 'red', lw = 3)
 axs[1].set_ylabel('Estimation of Variance', fontsize = fs)
-axs[1].legend(['True Value', 'MC', 'LMC', 'LMC_alpha'], fontsize = fs)
+axs[1].legend(['True Value', 'MC', 'LMC', 'LMC_alpha', 'adaptive'], fontsize = fs)
 for ax in axs:
     ax.set_xlabel('N', fontsize = fs)
     ax.tick_params( axis = 'both', labelsize = fs)
@@ -148,6 +160,8 @@ y = (np.abs(meanLMCs - truemu) / truemu).mean(axis = 0)
 axs[0].loglog(x, y, color = 'darkorange')
 y = (np.abs(meanLMCs_withAlpha - truemu) / truemu).mean(axis = 0)
 axs[0].loglog(x, y, color = 'green')
+y = (np.abs(mean_AMFs - truemu) / truemu).mean(axis = 0)
+axs[0].loglog(x, y, color = 'red')
 axs[0].set_ylabel('Error in estimation of mean', fontsize = fs)
 y = (np.abs(varMCs - truevar) / truevar).mean(axis = 0)
 axs[1].loglog(x, y, color = 'blue')
@@ -155,8 +169,10 @@ y = (np.abs(varLMCs - truevar) / truevar).mean(axis = 0)
 axs[1].loglog(x, y, color = 'darkorange')
 y = (np.abs(varLMCs_withAlpha - truevar) / truevar).mean(axis = 0)
 axs[1].loglog(x, y, color = 'green')
+y = (np.abs(var_AMFs - truevar) / truevar).mean(axis = 0)
+axs[1].loglog(x, y, color = 'red')
 axs[1].set_ylabel('Error in estimation of Variance', fontsize = fs)
-axs[1].legend(['MC', 'LMC', 'LMC_alpha'], fontsize = fs)
+axs[1].legend(['MC', 'LMC', 'LMC_alpha', 'adaptive'], fontsize = fs)
 for ax in axs:
     ax.set_xlabel('N', fontsize = fs)
     ax.tick_params( axis = 'both', labelsize = fs)
