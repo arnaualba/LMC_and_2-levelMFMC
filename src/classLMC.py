@@ -302,15 +302,15 @@ class LMC():
                 if self.verbose_:
                     print('Splitting Xtr into', Xtr.shape[0], 'training samples, and',
                           Xpred.shape[0], 'validation samples.')
-
-            elif self.split_train_percent_ == 'adaptive':
+            elif ((self.split_train_percent_ == 'adaptive_mean') or (self.split_train_percent_ == 'adaptive_var')):
                 N = len(self.ytr_)
                 if N < 10:
                     print("Since N < 10 the adaptive search cannot be done. Using 80% for training instead.")
                     percent_optim = 80
                 else:
-                    percents = np.arange(10,90,10)
-                    MSEs = np.zeros(len(percents))
+                    percents = np.arange(10,90,5)
+                    MSEs_mean = np.zeros(len(percents))
+                    MSEs_var = np.zeros(len(percents))
                     for i,percent in enumerate(percents):
                         Xtr, Xval, ytr, yval = train_test_split(self.Xtr_, self.ytr_,
                                                                   train_size = percent / 100,
@@ -318,14 +318,20 @@ class LMC():
                         n = len(ytr)
                         regloc = self.__train_regressor__(regloc, Xtr, ytr)
                         yval_pred = regloc.predict(Xval)
-                        MSEs[i] = np.var(yval_pred - yval) / (N - n)
-                    percent_optim = percents[np.argmin(MSEs)]
+                        MSEs_mean[i] = np.var(yval_pred - yval) / (N - n)
+                        MSEs_var[i] = (m22(yval + yval_pred, yval - yval_pred) +
+                                       1/(N-n-1)*np.var(yval + yval_pred, ddof=1)*np.var(yval - yval_pred, ddof=1) -
+                                       (N-n-2)/(N-n-1)*(np.var(yval,ddof=1) - np.var(yval_pred,ddof=1))**2) / (N-n)
+                    if self.split_train_percent_ == 'adaptive_mean':
+                        percent_optim = percents[np.argmin(MSEs_mean)]
+                    elif self.split_train_percent_ == 'adaptive_var':
+                        percent_optim = percents[np.argmin(MSEs_var)]
                     print("Optimal chosen split is {:.2f}%, which corresponds to n={:d}".format(percent_optim, int(percent_optim*N/100)))
                 Xtr, Xpred, ytr, ytrue = train_test_split(self.Xtr_, self.ytr_,
                                                           train_size = percent_optim / 100,
                                                           random_state = self.__get_rs__())
             else:
-                print('Error, split_train_percent should be number in [0,100] or "adaptive"')
+                print('Error, split_train_percent should be number in [0,100], "adaptive_mean", or "adaptive_var')
                 return 1
             
             regloc = self.__train_regressor__(regloc, Xtr, ytr)
