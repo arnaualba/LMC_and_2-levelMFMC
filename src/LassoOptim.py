@@ -1,4 +1,7 @@
-class LassoOptim(Lasso):
+import numpy as np
+from sklearn.linear_model import lasso_path
+
+class LassoOptim():
     '''
     It computes the full Lasso path on a given test set, using linear_model.lasso_path .
     Then it chooses the alpha that minimises the error on the test set.
