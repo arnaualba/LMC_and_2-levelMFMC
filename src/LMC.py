@@ -150,8 +150,8 @@ class LMC():
     def get_RMSE(self, low_fi_samps, hi_fi_samps):
         '''
         WIP does not include the alpha yet.
-        low_fi_samps are N samples of the surrogate model.
-        hi_fi_samps are N samples of the high-fidelity model.
+        low_fi_samps : N samples of the surrogate model.
+        hi_fi_samps : N samples of the high-fidelity model.
         
         Returns estimation of RMSE of the estimation of the std,
         ASSUMING THAT BOTH THE TRUE AND SURROGATE MODELS ARE NORMAL DISTRIBUTIONS.
@@ -167,7 +167,7 @@ class LMC():
         rmse_MFMC = rmse_MC * np.sqrt(1 + std_low_fi**4 / std_hi_fi**4 - cov_squared / std_hi_fi**4)
         return rmse_MC, rmse_MFMC
         
-    def get_estimates(self, Xtrain, ytrain, Xtest, ytest_lowlevel = [], ytrain_lowlevel = []):
+    def get_estimates(self, Xtrain, ytrain, Xtest, ytest_low_fi = [], ytrain_low_fi = []):
         '''
         Compute LMC estimators.
         Inputs are all np.arrays.
@@ -180,8 +180,8 @@ class LMC():
 
         If both of the two following arguments are provided, then there is no need to train any surrogate
         model. Only the two-level MC estimators will be computed.
-        ytest_lowlevel : array of size (M). Corresponds to low-level predictions of Xtest.
-        ytrain_lowlevel : array of size (N). Corresponds to low-level predictions of Xtrain.
+        ytest_low_fi : array of size (M). Corresponds to low-fidelity predictions of Xtest.
+        ytrain_low_fi : array of size (N). Corresponds to low-fidelity predictions of Xtrain.
         '''
         self.Xte_ = Xtest
         self.Xtr_ = Xtrain
@@ -205,11 +205,11 @@ class LMC():
         errorsMC = np.array([np.sqrt(varMC / N),
                              np.sqrt(m4MC - (N-3)/(N-1) * varMC**2) / np.sqrt(N)])
 
-        # If low level predictions are provided, then we can do normal 2LMC, no need to train anything.
-        if len(ytest_lowlevel) != 0 and len(ytrain_lowlevel) != 0:
-            print('Computing normal 2LMC, since samples from the low level model were provided;')
-            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var, alpha_mean, alpha_var = self.__2LMC__(ytest_lowlevel,
-                                                                                              self.ytr_, ytrain_lowlevel,
+        # If low-fidelity predictions are provided, then we can do normal 2LMC, no need to train anything.
+        if len(ytest_low_fi) != 0 and len(ytrain_low_fi) != 0:
+            print('Computing normal 2LMC, since samples from the low-fidelity model were provided;')
+            meanLMC, varLMC, MSE_LMC_mean, MSE_LMC_var, alpha_mean, alpha_var = self.__2LMC__(ytest_low_fi,
+                                                                                              self.ytr_, ytrain_low_fi,
                                                                                               use_alpha = self.use_alpha_)
             # Prepare dictionary with main results:
             results = {'meanMC' : meanMC,
