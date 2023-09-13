@@ -146,7 +146,27 @@ class LMC():
                 print('numFeat is', len(np.where(reg['regressor'].coef_ != 0)[0]))
 
         return reg
-    
+
+    def get_RMSE(self, low_fi_samps, hi_fi_samps):
+        '''
+        WIP does not include the alpha yet.
+        low_fi_samps are N samples of the surrogate model.
+        hi_fi_samps are N samples of the high-fidelity model.
+        
+        Returns estimation of RMSE of the estimation of the std,
+        ASSUMING THAT BOTH THE TRUE AND SURROGATE MODELS ARE NORMAL DISTRIBUTIONS.
+        '''
+        N = len(low_fi_samps)
+        assert N == len(hi_fi_samps)
+        
+        std_low_fi = low_fi_samps.std(ddof=1)
+        std_hi_fi = hi_fi_samps.std(ddof=1)
+        cov_squared = np.cov(low_fi_samps**2, hi_fi_samps**2)[0,1]
+        
+        rmse_MC = std_hi_fi / 2 / np.sqrt(N)
+        rmse_MFMC = rmse_MC * np.sqrt(1 + std_low_fi**4 / std_hi_fi**4 - cov_squared / std_hi_fi**4)
+        return rmse_MC, rmse_MFMC
+        
     def get_estimates(self, Xtrain, ytrain, Xtest, ytest_lowlevel = [], ytrain_lowlevel = []):
         '''
         Compute LMC estimators.
