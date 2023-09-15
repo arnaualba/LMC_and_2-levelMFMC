@@ -9,14 +9,18 @@ class LassoFixedN():
     Parameters:
     Nfeat : float. If Nfeat > 1, number of nonzero coefficients.
     If Nfeat < 1.0, the number of nonzero coefficients is Nfeat*Ntrain
+    normalise_output : boolean. If True, there is no need to normalise the outputs
+    y, since fit() and predict() will take care of it.
     
     Arguments:
     desiredNfeat_ : desired number of nonzero coefficients.
-    Nfeat_ : real number of nonzero coefficients.
+    normalise_output_ : whether to normalise the outputs y when training and predicting.
+    Nfeat_ : true number of nonzero coefficients.
     alpha_ : Chosen best alpha
     alphas_ : array of alphas used in the lasso_path
-    intercept_ : 
+    intercept_ : mean of training data.
     coef_ : coefficients from the Lasso fit.
+    sig_ : std of training data.
     
     Functions:
     fit(X,y,**params) : Computes the LassoPath with X,y, and chooses the model with the desired number of features.
@@ -24,9 +28,10 @@ class LassoFixedN():
     predict(X)
     '''
     
-    def __init__(self, Nfeat = 0.8):
+    def __init__(self, Nfeat = 0.8, normalise_output = False):
         super().__init__()
         self.desiredNfeat_ = Nfeat
+        self.normalise_output_ = normalise_output
         
         self.Nfeat_ = 0
         self.coef_ = []
@@ -41,7 +46,10 @@ class LassoFixedN():
         
         # Lasso path and find the path with the correct number of features.
         self.intercept_ = y.mean()
-        self.alphas_, coef_paths, _ = lasso_path(X, y - self.intercept_, **params)
+        self.sig_ = y.std(ddof=1) if self.normalise_output_ else 1.0
+        self.alphas_, coef_paths, _ = lasso_path(X,
+                                                 (y - self.intercept_) / self.sig_,
+                                                 **params)
         Nalpha = len(self.alphas_)
         Nfeats = np.array([len(np.where(coef_paths[:,idx] != 0.0)[0]) for idx in range(Nalpha)])
         idx = np.argmin(np.abs(Nfeats - targetN))
@@ -52,13 +60,14 @@ class LassoFixedN():
         self.Nfeat_ = len(np.where(coef_paths[:,idx] != 0.0)[0])
     
     def predict(self, X):
-        return np.dot(X, self.coef_) + self.intercept_
+        return np.dot(X, self.coef_) * self.sig_ + self.intercept_
 
     def get_params(self):
         params = {'numFeat' : self.Nfeat_}   
         params = {'desiredNumFeat' : self.desiredNfeat_}
         params['coef'] = self.coef_
         params['intercept'] = self.intercept_
+        params['sig'] = self.sig_
         params['alphas'] = self.alphas_ 
         params['alpha'] = self.alpha_
         

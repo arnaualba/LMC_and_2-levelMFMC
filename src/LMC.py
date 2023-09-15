@@ -161,10 +161,12 @@ class LMC():
         
         std_low_fi = low_fi_samps.std(ddof=1)
         std_hi_fi = hi_fi_samps.std(ddof=1)
-        cov_squared = np.cov(low_fi_samps**2, hi_fi_samps**2)[0,1]
+        cov_squared = np.cov((low_fi_samps - low_fi_samps.mean())**2,
+                             (hi_fi_samps - hi_fi_samps.mean())**2)[0,1]
         
         rmse_MC = std_hi_fi / 2 / np.sqrt(N)
-        rmse_MFMC = rmse_MC * np.sqrt(1 + std_low_fi**4 / std_hi_fi**4 - cov_squared / std_hi_fi**4)
+        intermediate_quantity = 1 + std_low_fi**4 / std_hi_fi**4 - cov_squared / std_hi_fi**4
+        rmse_MFMC = rmse_MC * np.sqrt(intermediate_quantity) if intermediate_quantity > 0.0 else 0.0
         return rmse_MC, rmse_MFMC
         
     def get_estimates(self, Xtrain, ytrain, Xtest, ytest_low_fi = [], ytrain_low_fi = []):
@@ -187,11 +189,6 @@ class LMC():
         self.Xtr_ = Xtrain
         self.ytr_ = ytrain
         N = len(self.ytr_)
-
-        assert self.Xtr_.shape[1] == self.Xte_.shape[1]
-        assert self.Xtr_.shape[0] == self.ytr_.shape[0]
-        
-        self.__print_num_samples__()
         
         starttime = time.time()
         
@@ -234,6 +231,11 @@ class LMC():
                 print('with estimated LMC errors: {:.3e}, {:.3e}'.format(errorsLMC[0], errorsLMC[1]))
 
             return results
+
+        
+        assert self.Xtr_.shape[1] == self.Xte_.shape[1]
+        assert self.Xtr_.shape[0] == self.ytr_.shape[0]
+        self.__print_num_samples__()
         
         # Scale data, to make ML methods work better:
         self.ytr_ = (self.ytr_ - meanMC) / np.sqrt(varMC)
