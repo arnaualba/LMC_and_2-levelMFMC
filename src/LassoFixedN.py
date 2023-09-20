@@ -72,3 +72,13 @@ class LassoFixedN():
         params['alpha'] = self.alpha_
         
         return params
+
+    def save_model(self, fn):
+        arr_to_save = np.append(self.coef_, [self.sig_, self.intercept_])
+        np.save(fn, arr_to_save)
+
+    def load_model(self, fn):
+        arr = np.load(fn)
+        self.coef_ = arr[:-2]
+        self.sig_ = arr[-2]
+        self.intercept_ = arr[-1]
