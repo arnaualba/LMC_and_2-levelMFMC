@@ -1,0 +1,40 @@
+#!/bin/bash -l
+##SBATCH --clusters=gmerlin6
+##SBATCH --partition=gpu-short
+#SBATCH --clusters=merlin6
+#SBATCH --partition=hourly
+#SBATCH --time=00:05:00
+#SBATCH --ntasks=10
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=1
+##SBATCH --gpus-per-task=8
+#SBATCH --job-name="juliaLasso"
+
+mkdir -p /scratch/$SLURM_JOB_ID
+export TMPDIR=/scratch/$SLURM_JOB_ID
+
+NOW=$(date +"%m-%d-%Y")
+NOW2=$(date +"%r")
+echo "Starting time: $NOW, $NOW2"
+echo ""
+START=$(date +%s)
+
+echo "Local host: $HOSTNAME"
+
+module use unstable
+module load Julia/1.9.2
+echo "Non-threaded"
+julia --project=/data/user/albajacas_a/julia_envs/phd_env/ test_lasso_julia.jl
+julia --project=/data/user/albajacas_a/julia_envs/phd_env/ test_lasso_julia.jl
+
+echo "Threaded"
+julia --project=/data/user/albajacas_a/julia_envs/phd_env/ --threads 10 test_lasso_julia.jl
+julia --project=/data/user/albajacas_a/julia_envs/phd_env/ --threads 10 test_lasso_julia.jl
+
+END=$(date +%s)
+DIFF=$(( $END - $START ))
+echo "It took $DIFF seconds"
+NOW=$(date +"%m-%d-%Y")
+NOW2=$(date +"%r")
+echo "Ending time: $NOW, $NOW2"
+
