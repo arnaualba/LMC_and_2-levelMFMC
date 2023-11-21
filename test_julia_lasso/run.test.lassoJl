@@ -3,12 +3,12 @@
 ##SBATCH --partition=gpu-short
 #SBATCH --clusters=merlin6
 #SBATCH --partition=hourly
-#SBATCH --time=00:05:00
-#SBATCH --ntasks=10
+#SBATCH --time=00:15:00
+#SBATCH --ntasks=20
 #SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
 ##SBATCH --gpus-per-task=8
 #SBATCH --job-name="juliaLasso"
+#SBATCH --output=%x.slurm.out
 
 mkdir -p /scratch/$SLURM_JOB_ID
 export TMPDIR=/scratch/$SLURM_JOB_ID
@@ -23,13 +23,11 @@ echo "Local host: $HOSTNAME"
 
 module use unstable
 module load Julia/1.9.2
-echo "Non-threaded"
-julia --project=/data/user/albajacas_a/julia_envs/phd_env/ test_lasso_julia.jl
+echo "Single thread"
 julia --project=/data/user/albajacas_a/julia_envs/phd_env/ test_lasso_julia.jl
 
-echo "Threaded"
-julia --project=/data/user/albajacas_a/julia_envs/phd_env/ --threads 10 test_lasso_julia.jl
-julia --project=/data/user/albajacas_a/julia_envs/phd_env/ --threads 10 test_lasso_julia.jl
+echo "Multithreaded"
+julia --project=/data/user/albajacas_a/julia_envs/phd_env/ --threads 20 test_lasso_julia.jl
 
 END=$(date +%s)
 DIFF=$(( $END - $START ))

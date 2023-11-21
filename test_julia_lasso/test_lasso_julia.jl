@@ -1,26 +1,27 @@
+# -*- coding: utf-8 -*-
 include("Lasso.jl")
 using Printf
 using Random
 
 nthread = Threads.nthreads()
-println("I am using $nthread threads")
+println("\nI am using $nthread threads")
 
 seed = abs(rand(Int)); println("Using seed ", seed)
+N = 150
+d = 900
+println("N = ", N, ", d = ", d)    
 
-function test_Lasso_methods(;verbose = true)
-    N = 50  # Number of inputs
-    d = 200  # Number of dimensions (aka features, variables, etc...)
+function test_Lasso_methods(N, d ;verbose = true)
     X = randn(N,d); Xtest = randn(N,d); normalise!(X,Xtest)
     α = rand(d); α[1:10] = 40.0 .* (rand(10) .- 0.5)  # y = X*α + noise
     noise = 5.5
     y = X * α .+ randn(N)*noise; ytest = Xtest * α; normalise!(y,ytest)
-
-    if verbose
-        println("d = $d, N = $N")
-        @printf "Base MSE = %29.2f\n" mse(ytest, zeros(length(ytest)))
-    end
-
-    methods = [:Od, :On, :uncorrelated]  #, :SK]
+    methods = [:Od,
+                :On,
+                :wild,
+                :Asy,
+                # :uncorrelated,
+                :SK]
     ts = []; βs = []; λs = []; mses = []; losses = []
     for method in methods
         t = @elapsed locλs, locβs, nIters = lasso_path(X, y, method = method)
@@ -36,24 +37,30 @@ function test_Lasso_methods(;verbose = true)
 
     # Print stuff:
     if verbose
+        @printf "MSE with %20s = %.5f\n" "zeros" mse(ytest, zeros(length(ytest)))
+        OLStime = @elapsed OLSbeta = pinv(X) * y
+        @printf "MSE with %20s = %.5f\n" "OLS" mse(ytest, Xtest*OLSbeta)
         for (i,method) in enumerate(methods)
-            @printf "MSE with %20s = %.3f\n" string(method) mses[i]
+            @printf "MSE with %20s = %.5f\n" string(method) mses[i]
         end
         println()
+        @printf "Time with %20s = %.5f s\n" "OLS" OLStime
         for (i,method) in enumerate(methods)
-            @printf "Time with %20s = %.3f s\n" string(method) ts[i]
+            @printf "Time with %20s = %.5f s\n" string(method) ts[i]
         end
     end
 end
 
 # Run once to force compilation:
 Random.seed!(seed);
-test_Lasso_methods(verbose = false)
+test_Lasso_methods(100, 10, verbose = false)
 
 # Run for real:
-Random.seed!(seed);
-test_Lasso_methods()
-
+Nrep = 3
+for n=1:Nrep
+    println("Repetition $n of $Nrep")
+    test_Lasso_methods(N, d, verbose = true)
+end
 
 
 # l = @layout [a b ; c]

@@ -1,0 +1,119 @@
+Loading cmake/3.20.5...
+Loading gcc/10.4.0...
+Loading openmpi/4.1.5_slurm...
+Loading hdf5/1.10.8_slurm...
+Loading gsl/2.7...
+Loading H5hut/2.0.0rc6_slurm...
+Loading boost/1.82.0_slurm...
+Loading amrex/18.07.1_3d_slurm...
+Loading OpenBLAS/0.3.23...
+Loading parmetis/4.0.3_slurm...
+Loading trilinos/13.4.0_slurm...
+Loading MITHRA/2.0_slurm...
+Loading gtest/1.13.0-1...
+Done.
+Starting time: 11-20-2023, 03:53:25 
+
+Local host: merlin-c-304.psi.ch
+Single thread
+
+I am using 1 threads
+Using seed 6979445683259714072
+N = 150, d = 900
+Repetition 1 of 3
+MSE with                zeros = 1.02597
+MSE with                  OLS = 0.97561
+MSE with                   Od = 0.30442
+MSE with                   On = 0.30442
+MSE with                 wild = 0.30442
+MSE with                  Asy = 0.30442
+MSE with                   SK = 0.30446
+
+Time with                  OLS = 0.40440 s
+Time with                   Od = 1.47184 s
+Time with                   On = 1.32718 s
+Time with                 wild = 1.48605 s
+Time with                  Asy = 3.48640 s
+Time with                   SK = 0.38586 s
+Repetition 2 of 3
+MSE with                zeros = 0.98979
+MSE with                  OLS = 0.87466
+MSE with                   Od = 0.27645
+MSE with                   On = 0.27645
+MSE with                 wild = 0.27645
+MSE with                  Asy = 0.27645
+MSE with                   SK = 0.27624
+
+Time with                  OLS = 0.09647 s
+Time with                   Od = 0.77256 s
+Time with                   On = 1.02471 s
+Time with                 wild = 1.15938 s
+Time with                  Asy = 2.91791 s
+Time with                   SK = 0.50351 s
+Repetition 3 of 3
+MSE with                zeros = 1.27552
+MSE with                  OLS = 1.00556
+MSE with                   Od = 0.41470
+MSE with                   On = 0.41470
+MSE with                 wild = 0.41470
+MSE with                  Asy = 0.41470
+MSE with                   SK = 0.41644
+
+Time with                  OLS = 0.10139 s
+Time with                   Od = 0.54868 s
+Time with                   On = 0.88800 s
+Time with                 wild = 1.02826 s
+Time with                  Asy = 2.54663 s
+Time with                   SK = 0.51755 s
+Multithreaded
+
+I am using 20 threads
+Using seed 3085775515113260767
+N = 150, d = 900
+Repetition 1 of 3
+MSE with                zeros = 0.90936
+MSE with                  OLS = 0.80551
+MSE with                   Od = 0.23280
+MSE with                   On = 0.23280
+MSE with                 wild = 0.24660
+MSE with                  Asy = NaN
+MSE with                   SK = 0.23293
+
+Time with                  OLS = 0.39984 s
+Time with                   Od = 1.06009 s
+Time with                   On = 1.02725 s
+Time with                 wild = 1.24757 s
+Time with                  Asy = 9.02596 s
+Time with                   SK = 0.56594 s
+Repetition 2 of 3
+MSE with                zeros = 1.38190
+MSE with                  OLS = 1.15553
+MSE with                   Od = 0.58629
+MSE with                   On = 0.58629
+MSE with                 wild = 0.64843
+MSE with                  Asy = NaN
+MSE with                   SK = 0.58629
+
+Time with                  OLS = 0.14901 s
+Time with                   Od = 0.73605 s
+Time with                   On = 1.13070 s
+Time with                 wild = 3.30872 s
+Time with                  Asy = 24.94788 s
+Time with                   SK = 0.50986 s
+Repetition 3 of 3
+MSE with                zeros = 0.79971
+MSE with                  OLS = 0.71222
+MSE with                   Od = 0.28237
+MSE with                   On = 0.28237
+MSE with                 wild = 0.29769
+MSE with                  Asy = NaN
+MSE with                   SK = 0.28243
+
+Time with                  OLS = 0.13843 s
+Time with                   Od = 0.74482 s
+Time with                   On = 1.11837 s
+Time with                 wild = 1.83201 s
+Time with                  Asy = 16.17446 s
+Time with                   SK = 0.41528 s
+It took 116 seconds
+Ending time: 11-20-2023, 03:55:21 
