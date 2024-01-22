@@ -147,11 +147,12 @@ class LMC():
 
         return reg
 
-    def get_RMSE(self, low_fi_samps, hi_fi_samps):
+    def get_RMSE(self, low_fi_samps, hi_fi_samps, many_low_fi_samps):
         '''
         WIP does not include the alpha yet.
         low_fi_samps : N samples of the surrogate model.
         hi_fi_samps : N samples of the high-fidelity model.
+        many_low_fi_samps : M (with M>>N) samples of the surrogate model.
         
         Returns estimation of RMSE of the estimation of the std,
         ASSUMING THAT BOTH THE TRUE AND SURROGATE MODELS ARE NORMAL DISTRIBUTIONS.
@@ -159,7 +160,7 @@ class LMC():
         N = len(low_fi_samps)
         assert N == len(hi_fi_samps)
         
-        std_low_fi = low_fi_samps.std(ddof=1)
+        std_low_fi = many_low_fi_samps.std(ddof=1)
         std_hi_fi = hi_fi_samps.std(ddof=1)
         cov_squared = np.cov((low_fi_samps - low_fi_samps.mean())**2,
                              (hi_fi_samps - hi_fi_samps.mean())**2)[0,1]
