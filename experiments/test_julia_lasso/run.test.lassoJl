@@ -4,7 +4,7 @@
 #SBATCH --clusters=merlin6
 #SBATCH --partition=hourly
 #SBATCH --time=00:15:00
-#SBATCH --ntasks=20
+#SBATCH --ntasks=8
 #SBATCH --nodes=1
 ##SBATCH --gpus-per-task=8
 #SBATCH --job-name="juliaLasso"
@@ -23,11 +23,12 @@ echo "Local host: $HOSTNAME"
 
 module use unstable
 module load Julia/1.9.2
-echo "Single thread"
-julia --project=/data/user/albajacas_a/julia_envs/phd_env/ test_lasso_julia.jl
+# echo "Single thread"
+# julia --project=/data/user/albajacas_a/julia_envs/phd_env/ test_lasso_julia.jl
 
+echo " "
 echo "Multithreaded"
-julia --project=/data/user/albajacas_a/julia_envs/phd_env/ --threads 20 test_lasso_julia.jl
+julia --project=/data/user/albajacas_a/julia_envs/phd_env/ --threads 8 test_lasso_julia.jl
 
 END=$(date +%s)
 DIFF=$(( $END - $START ))

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+0# -*- coding: utf-8 -*-
 include("Lasso.jl")
 using Printf
 using Random
@@ -7,8 +7,8 @@ nthread = Threads.nthreads()
 println("\nI am using $nthread threads")
 
 seed = abs(rand(Int)); println("Using seed ", seed)
-N = 150
-d = 900
+N = 800
+d = 10000
 println("N = ", N, ", d = ", d)    
 
 function test_Lasso_methods(N, d ;verbose = true)
@@ -16,19 +16,23 @@ function test_Lasso_methods(N, d ;verbose = true)
     α = rand(d); α[1:10] = 40.0 .* (rand(10) .- 0.5)  # y = X*α + noise
     noise = 5.5
     y = X * α .+ randn(N)*noise; ytest = Xtest * α; normalise!(y,ytest)
-    methods = [:Od,
+    methods = [
+                # :Od,
+                # :Od_threaded,
+                :no_shared_vector,
+                :no_shared_vector_threaded,
                 :On,
-                :wild,
-                :Asy,
-                # :uncorrelated,
-                :SK]
+                :On_threaded, 
+                # :uncorrelated,  # Doing an SVD is expensive.
+                :SK,
+                ]
     ts = []; βs = []; λs = []; mses = []; losses = []
     for method in methods
         t = @elapsed locλs, locβs, nIters = lasso_path(X, y, method = method)
         
-        loclosses = [mse(ytest, Xtest*locβs[i,:]) for i=1:length(locλs)]
+        loclosses = [mse(ytest, Xtest*locβs[:,i]) for i=1:length(locλs)]
         push!(ts, t)
-        push!(βs, locβs[argmin(loclosses),:])
+        push!(βs, locβs[:,argmin(loclosses)])
         push!(λs, locλs[argmin(loclosses)]) 
         push!(mses, mse(ytest, Xtest*βs[end]))
         push!(losses, loclosses)
@@ -56,9 +60,9 @@ Random.seed!(seed);
 test_Lasso_methods(100, 10, verbose = false)
 
 # Run for real:
-Nrep = 3
+Nrep = 1
 for n=1:Nrep
-    println("Repetition $n of $Nrep")
+    println("\nRepetition $n of $Nrep")
     test_Lasso_methods(N, d, verbose = true)
 end
 

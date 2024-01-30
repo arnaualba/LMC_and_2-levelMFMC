@@ -23,27 +23,35 @@ maxIter : int, the maximum number of iterations of coordinate descent.
 tol : float, tolerance used to check whether to stop iterations.
 The stopping criterion is `if maximum(abs.(β .- oldβ)) < tol * maximum(abs.(β)) break`.
 method : either :Od, :On, :uncorrelated, :SK.
-In case :Od, each iteration of coordinate_descent! has complexity O(d^2). 
-In case :On, each iteration has complexity O(nd). Better when n<<d. (in theory...)
-In case :uncorrelated, it is assumed that cov(X) is zero everywhere except the diagonal,
+- In case :Od, each iteration of coordinate_descent! has complexity O(d^2). Memory usage is O(d^2).
+- In case :On, each iteration has complexity O(nd). Better when n<<d. Memory usage os O(n).
+- In case :no_shared_vector, each iteration is slow, but no extra memory is required.
+- In case :uncorrelated, it is assumed that cov(X) is zero everywhere except the diagonal,
 and then only one step is required per dimension, without any iterations.
-Some multithreaded options: :Asy and :wild
-In case :SK, the sklearn.lasso_path() method is used. This method has its own calculation
+- In case :SK, the sklearn.lasso_path() method is used. This method has its own calculation
 of λs.
+- In case :Od_threaded 
+- In case :On_threaded
+- In case :no_shared_vector_threaded
 
 Returns λs, βs, nIters
 """
-function lasso_path(X, y; λs = nothing, P = 100, eps = 1e-3, maxIter = 1000, tol = 1e-4, method = :Od)
+function lasso_path(X, y; λs = nothing, P = 100, eps = 1e-3, maxIter = 1000,
+                    tol = 1e-4, method = :Od)
     N,d = size(X)
+    nth = Threads.nthreads()
 
-    # Choose λs if not provided.
-    if λs == nothing
-        λmax = maximum(abs.(X' * y))
-        λs = [λmax * eps^(p/P) for p=0:P-1]
+    if method != :SK
+        # Choose λs if not provided.
+        if λs == nothing
+            λmax = maximum(abs.(X' * y))
+            λs = [λmax * eps^(p/P) for p=0:P-1]
+        end
+        @assert all((λs[1:end-1] .- λs[2:end]) .> 0.0) "λs must be in descending order."
+        P = length(λs)
+        βs = zeros(Float64, d, P)
     end
-    @assert all((λs[1:end-1] .- λs[2:end]) .> 0.0) "λs must be in descending order."
-    P = length(λs)
-    βs = zeros(Float64, P, d)
+        
     nIters = zeros(Int64, P)
     
     # Lasso path:
@@ -51,43 +59,68 @@ function lasso_path(X, y; λs = nothing, P = 100, eps = 1e-3, maxIter = 1000, to
         XX = X' * X
         Xres = X' * y  # X'*residue = X'*(y - X*β)
         for i=2:P
-            βs[i,:] .+= βs[i-1,:]  # Warm start for next λ.
-            nIters[i] = coordinate_descent!(XX, Xres, λs[i], view(βs, i, :), 
+            βs[:,i] .+= βs[:, i-1]  # Warm start for next λ.
+            nIters[i] = coordinate_descent!(XX, Xres, λs[i], view(βs, :, i), 
                     maxIter = maxIter, tol = tol)
         end
     elseif method == :On
         XXmin1 = sum(X.^2, dims=1) .^ (-1)
         res = copy(y)  # Residue y - X*β
         for i=2:P
-            βs[i,:] .+= βs[i-1,:]  # Warm start for next λ.
-            nIters[i] = coordinate_descent!(XXmin1, res, λs[i], view(βs, i, :), X,
+            βs[:,i] .+= βs[:, i-1]  # Warm start for next λ.
+            nIters[i] = coordinate_descent!(XXmin1, res, λs[i], view(βs, :, i), X,
                     maxIter = maxIter, tol = tol)
         end
+    elseif method == :no_shared_vector
+        XXmin1 = sum(X.^2, dims=1) .^ (-1)
+        for i=2:P
+            βs[:,i] .+= βs[:, i-1]  # Warm start for next λ.
+            nIters[i] = no_shared_vector_coordinate_descent!(X, y, λs[i], view(βs, :, i), XXmin1,
+                    maxIter = maxIter, tol = tol)
+        end        
     elseif method == :uncorrelated
         XXmin1 = sum(X.^2, dims=1) .^ (-1)
         Xy = X' * y
-        Threads.@threads for i=1:P
-            uncorrelated_coordinate_descent!(XXmin1, Xy, λs[i], view(βs, i, :))
-        end
-    elseif method == :wild
-        XXmin1 = sum(X.^2, dims=1) .^ (-1)
-        res = copy(y)  # Residue y - X*β
-        for i=2:P
-            βs[i,:] .+= βs[i-1,:]  # Warm start for next λ.
-            nIters[i] = wild_coordinate_descent!(XXmin1, res, λs[i], view(βs, i, :), X,
-                    maxIter = maxIter, tol = tol)
-        end
-    elseif method == :Asy
-        XX = X'*X
-        for i=2:P
-            βs[i,:] .+= βs[i-1,:]  # Warm start for next λ.
-            nIters[i] = Asy_coordinate_descent!(XX, X, y, λs[i], view(βs, i, :), 
-                    maxIter = maxIter, tol = tol)
+        for i=1:P
+            uncorrelated_coordinate_descent!(XXmin1, Xy, λs[i], view(βs, :, i))
         end
     elseif method == :SK
         skresults = sklearn_linear_model.lasso_path(X,y)
-        βs = skresults[2]'
+        βs = skresults[2]
         λs = skresults[1]
+    elseif method == :Od_threaded
+        XX = X' * X  # All threads can share this since it is not modified.
+        Xres = X' * y  # X'*residue = X'*(y - X*β)
+        Xres = rep(Xres, nth)  # Each thread has its own residue.
+        splits = Int.(floor.(LinRange(1, P+1, nth+1)))
+        Threads.@threads for th=1:nth
+            for i = splits[th]:(splits[th+1]-1)
+                if i > splits[th] βs[:, i] .+= βs[:, i-1] end  # Warm start for next λ.
+                nIters[i] = coordinate_descent!(XX, view(Xres, :, th), λs[i], view(βs, :, i), 
+                        maxIter = maxIter, tol = tol)
+            end
+        end
+    elseif method == :On_threaded
+        XXmin1 = sum(X.^2, dims=1) .^ (-1)  # All threads can share this since it is not modified.
+        res = rep(y, nth)  # Each thread has its own residue y - X*beta.
+        splits = Int.(floor.(LinRange(1, P+1, nth+1)))
+        Threads.@threads for th=1:nth
+            for i = splits[th]:(splits[th+1]-1)
+                if i > splits[th] βs[:, i] .+= βs[:, i-1] end  # Warm start for next λ.            
+                nIters[i] = coordinate_descent!(XXmin1, view(res, :, th), λs[i], view(βs, :, i), X,
+                        maxIter = maxIter, tol = tol)
+            end
+        end
+    elseif method == :no_shared_vector_threaded
+        XXmin1 = sum(X.^2, dims=1) .^ (-1)  # All threads can share this since it is not modified.
+        splits = Int.(floor.(LinRange(1, P+1, nth+1)))
+        Threads.@threads for th=1:nth
+            for i = splits[th]:(splits[th+1]-1)
+                if i > splits[th] βs[:, i] .+= βs[:, i-1] end  # Warm start for next λ.            
+                nIters[i] = no_shared_vector_coordinate_descent!(X, y, λs[i], view(βs, :, i), XXmin1,
+                        maxIter = maxIter, tol = tol)
+            end
+        end
     else
         println("Error, unknown method $method !!")
         return 1
@@ -119,24 +152,6 @@ Mean squared error.
 y and ypred are arrays of floats.
 """
 mse(y,ypred) = mean((y-ypred).^2)
-
-
-"""
-function fast_square(X)
-
-Computes X'*X. Uses symmetry arguments
-to avoid repeating inner products.
-
-Returns X'*X
-"""
-function fast_square(X)
-    N,d = size(X)
-    XX = zeros(d,d)
-    @simd for i=1:d
-        @inbounds XX[i,i:d] = sum(X[1:N,i] .* X[1:N,i:d], dims=1)
-    end
-    return XX
-end
 
 
 """
@@ -190,6 +205,7 @@ function coordinate_descent!(XX, Xres, λ, β; maxIter = 1000, tol = 1e-4)
     return iter
 end
 
+
 """
 function coordinate_descent!(XXmin1, res, λ, β, X::Array{Float64}; maxIter = 1000, tol = 1e-4)
 
@@ -229,65 +245,34 @@ function coordinate_descent!(XXmin1, res, λ, β, X::Array{Float64}; maxIter = 1
     return iter
 end
 
-"""
-function wild_coordinate_descent!(XXmin1, res, λ, β, X::Array{Float64}; maxIter = 1000, tol = 1e-4)
 
-Multithreaded coordinate descent, with the "wild" updated of the shared vector.
 """
-function wild_coordinate_descent!(XXmin1, res, λ, β, X::Array{Float64}; maxIter = 1000, tol = 1e-4)
-    oldβ = zeros(length(β))  # TODO: These two vectors could have length nthreads() to save memory.
-    tmp = zeros(length(β))
+function no_shared_vector_coordinate_descent!(X, y, λ, β, XXmin1; maxIter = 1000, tol = 1e-4)
+
+Coordinate descent without a shared vector. It uses very little memory (and few allocations), 
+at the expense of being a bit slower than the "shared vector" versions.
+"""
+function no_shared_vector_coordinate_descent!(X, y, λ, β, XXmin1; maxIter = 1000, tol = 1e-4)
+    oldβ = 0.0
     maxChange = 0.0
     maxβ = 0.0
     iter = 0
-
-    while (iter < maxIter) && (maxChange >= tol*maxβ)
-        iter += 1
-        # Parallel coordinate update:
-        Threads.@threads for j in eachindex(β)
-            oldβ[j] = β[j]
-            tmp[j] = X[:,j] · res
-            if β[j] != 0.0 tmp[j] += β[j] * dot(X[:,j], X[:,j]) end
-            β[j] = max(abs(tmp[j]) - λ, 0.0)
-            if β[j] != 0.0 β[j] *= sign(tmp[j]) * XXmin1[j] end
-            # Wild update of shared vector:
-            for i in eachindex(res)  # Warning! loop has race conditions! (hence the "wild")
-                res[i] += X[i,j] * (oldβ[j] - β[j])
-            end
-        end
+    tmp = 0.0
     
-        maxβ = maximum(abs.(β))
-        maxChange = maximum(abs.(β .- oldβ))
-    end 
-    return iter
-end
-
-
-"""
-function Asy_coordinate_descent!(XX, X, y, λ, β; maxIter = 1000, tol = 1e-4)
-
-AsySCD. Multithreaded coordinate descent without shared vector, only updates to β.
-It's possible that each thread uses an outdated version of β due to multithreading.
-"""
-function Asy_coordinate_descent!(XX, X, y, λ, β; maxIter = 1000, tol = 1e-4)
-    oldβ = zeros(length(β))  # TODO: These two vectors could have length nthreads() to save memory.
-    tmp = zeros(length(β))
-    maxChange = 0.0
-    maxβ = 0.0
-    iter = 0
-
     while (iter < maxIter) && (maxChange >= tol*maxβ)
         iter += 1
-        # Parallel coordinate update:
-        Threads.@threads for j in eachindex(β)
-            oldβ[j] = β[j]
-            β[j] = 0.0
-            tmp[j] = X[:,j]·y - XX[:,j]·β
-            β[j] = max(abs(tmp[j]) - λ, 0.0)
-            if β[j] != 0.0 β[j] *= sign(tmp[j]) / XX[j,j] end
+        maxChange = 0.0
+        maxβ = 0.0
+        for j in eachindex(β)
+            oldβ = β[j]
+            tmp = X[:,j] · (y - X * β)
+            β[j] = max(abs(tmp) - λ, 0.0)
+            if β[j] != 0.0 
+                β[j] *= sign(tmp) * XXmin1[j]
+                maxβ = max(abs(β[j]), maxβ)
+            end
+            maxChange = max(abs(β[j] - oldβ), maxChange)
         end
-        maxβ = maximum(abs.(β))
-        maxChange = maximum(abs.(β .- oldβ))
     end 
     return iter
 end
@@ -312,3 +297,16 @@ function uncorrelated_coordinate_descent!(XXmin1, Xy, λ, β)
     end
 end
 
+
+"""
+function rep(x::AbstractVector, Nrep::Integer)
+
+Repeat a vector to form a matrix.
+"""
+function rep(x::AbstractVector, Nrep::Integer)
+    result = zeros(length(x), Nrep)
+    for i=1:Nrep
+        result[:,i] = x
+    end
+    return result
+end
