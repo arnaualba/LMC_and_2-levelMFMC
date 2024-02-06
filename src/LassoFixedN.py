@@ -62,7 +62,7 @@ class LassoFixedN():
     def predict(self, X):
         return np.dot(X, self.coef_) * self.sig_ + self.intercept_
 
-    def get_params(self):
+    def get_params(self, deep = False):
         params = {'numFeat' : self.Nfeat_}   
         params = {'desiredNumFeat' : self.desiredNfeat_}
         params['coef'] = self.coef_
