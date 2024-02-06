@@ -58,7 +58,23 @@ def get_Vars(Ss, N):
     Vars[1] += 4*N*(2*N-3)*Ss[1]*Ss[0]**2
     Vars[1] += -4*(N-1)**2*N*Ss[2]*Ss[0]
     Vars[1] /= N**2 * (N-1)**2 * (N-2) * (N-3)
-    
+    # Var skewness:
+    # At the moment this is commented out, because it only
+    # makes sense if combined_var skewness is available too.
+    # term1 = 1 / ((N - 5)*(N - 4)*(N - 3)*(N - 2)**2*(N - 1)**2*N**2)
+    # term2 = -12*(3*N**2 - 15*N + 20)*Ss[0]**6
+    # term3 = 36*N*(3*N**2 - 15*N + 20)*Ss[1]*Ss[0]**4
+    # term4 = -24*N**2*(2*N**2 - 9*N + 11)*Ss[2]*Ss[0]**3
+    # term5 = 3*N*Ss[0]**2 * ((7*N**4 - 36*N**3 + 79*N**2 - 90*N + 40)*Ss[3]
+    #                        - 6*N*(4*N**2 - 21*N + 29)*Ss[1]**2)
+    # term6 = -6*N*Ss[0] * ((N**3 - 3*N**2 + 6*N - 8)*(N - 1)**2 * Ss[4]
+    #                      + (-5*N**4 + 18*N**3 + 13*N**2 - 90*N + 40)*Ss[1]*Ss[2])
+    # term7 = N * ((N - 1)**2 * N * (N**3 - 3*N**2 + 6*N - 8) * Ss[5] +
+    #              3*(3*N**4 - 24*N**3 + 71*N**2 - 90*N + 40)*Ss[1]**3 -
+    #              3*(2*N**5 - 11*N**4 + 14*N**3 + 25*N**2 - 70*N + 40)*Ss[3]*Ss[1] -
+    #              (N**5 + 4*N**4 - 41*N**3 + 40*N**2 + 100*N - 80)*Ss[2]**2)
+    # Vars[2] = term1 * (term2 + term3 + term4 + term5 - term6 + term7)
+
     # Var of higher orders not implemented yet.
 
     return Vars
@@ -81,8 +97,12 @@ def get_combined_Vars(Ss, N):
     VarsComb[1] += Ss[0,1]**2 * ((6-4*N)*Ss[1,0]**2 + (N-1)*N*Ss[2,0])
     VarsComb[1] += -2*N*Ss[0,1]*((N-1)**2*Ss[2,1] + (5-3*N)*Ss[1,0]*Ss[1,1])
     VarsComb[1] /= N**2 * (N-1)**2 * (N-2) * (N-3)
+    # MLMC Var skewness, second part: Var(h3 - h3Surr)
+    
     
     # Vars of higher orders not implemented yet.
+    
+    return VarsComb
 
 def get_conf_ints(MSEs, p = 0.95):
     return np.array([np.sqrt(MSE / (1-p)) for MSE in MSEs])
@@ -90,29 +110,28 @@ def get_conf_ints(MSEs, p = 0.95):
 def get_two_level_estimates(ys, ysSurr, ysSurrM,
                             calculate_MSEs = False,
                             adjust_alpha = False):
-    # get_two_level_estimates(ys, ysSurr, ysSurrM,
-    #                       calculate_MSEs = False,
-    #                       adjust_alpha = False)
-    # Returns a dictionary with the estimation of the first four moments
-    # using MC, the surrogate model surr, and two-level-MC.
-    #
-    # The moments are calculated using h-statistics.
-    # The high-fidelity model is considered unbiased and expensive,
-    # while the low-fidelity model surr is a cheap and biased surrogate model.
-    #
-    # ys and ysSurr are correlated and have N samples each.
-    # ysSurrM has M samples with M>>N, and is uncorrelated to ys and ysSurr.
-    #
-    # If calculate_MSEs, the unbiased MSEs of the moment estimations are estimated.
-    # They are returned as MSEs of MC and MSEs of MFMC.
-    # We have MSE_MFMC = Var(h(surr)) + Var(h(hi-fi) - h(surr)), so
-    # we also return the two parts of the MSE_MFMC as Vars surr and Vars comb.
-    # 
-    # The two-level-MC formula for estimating a quantity m based on the h-statistics is
-    # m = h(ySurr, M) + h(y,N) - h(ySurr,N)
-    # If adjust_alpha = True, then the estimator becomes
-    # m = h(alpha*ySurr, M) + h(y,N) - h(alpha*ySurr,N),
-    # where alpha = cov(y,ySurr) / var(ySurr) is estimated from the available samples.
+    """
+    Returns a dictionary with the estimation of the first four moments
+    using MC, the surrogate model surr, and two-level-MC.
+    
+    The moments are calculated using h-statistics.
+    The high-fidelity model is considered unbiased and expensive,
+    while the low-fidelity model surr is a cheap and biased surrogate model.
+    
+    ys and ysSurr are correlated and have N samples each.
+    ysSurrM has M samples with M>>N, and is uncorrelated to ys and ysSurr.
+    
+    If calculate_MSEs, the unbiased MSEs of the moment estimations are estimated.
+    They are returned as MSEs of MC and MSEs of MFMC.
+    We have MSE_MFMC = Var(h(surr)) + Var(h(hi-fi) - h(surr)), so
+    we also return the two parts of the MSE_MFMC as Vars surr and Vars comb.
+    
+    The two-level-MC formula for estimating a quantity m based on the h-statistics is
+    m = h(ySurr, M) + h(y,N) - h(ySurr,N)
+    If adjust_alpha = True, then the estimator becomes
+    m = h(alpha*ySurr, M) + h(y,N) - h(alpha*ySurr,N),
+    where alpha = cov(y,ySurr) / var(ySurr) is estimated from the available samples.
+    """
     
     N = len(ys)
     M = len(ysSurrM)
