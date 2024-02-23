@@ -161,7 +161,7 @@ def get_two_level_estimates(ys, ysSurr, ysSurrM,
     if calculate_MSEs:
         return_dict['MSEs MC'] = get_Vars(Ss, N)
         return_dict['Vars surr'] = get_Vars(SsSurrM, M)
-        SsComb = get_combined_power_sums(ys, ysSurr)
+        SsComb = get_combined_power_sums(ys, alpha * ysSurr)
         return_dict['Vars comb'] = get_combined_Vars(SsComb, N)
         return_dict['MSEs MFMC'] = return_dict['Vars surr'] + return_dict['Vars comb']
     
