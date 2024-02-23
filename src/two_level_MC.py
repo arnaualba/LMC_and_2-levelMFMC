@@ -14,8 +14,8 @@ def get_combined_power_sums(ys, ysSurr):
     # SsComb[1,2] = sum((ys+ysSurr)(ys-ysSurr)^2)
     # etc...
     SsComb = np.zeros((3,3))
-    for i in range(2):
-        for j in range(2):
+    for i in range(3):
+        for j in range(3):
             SsComb[i,j] =  np.sum((ys + ysSurr)**i * (ys - ysSurr)**j)
     return SsComb
     
