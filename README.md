@@ -10,7 +10,7 @@ A paper of MFMC applied to UQ with spent nuclear fuel is under preparation.
 ```
 
 >>> # Generate data or import simulation results:
->>> M = 10**4
+>>> M = 10**4  # Number of cheap simulations.
 >>> N = 20  # Number of expensive simulations.
 >>> d = 30  # Input dimension
 >>> xs = np.random.randn(M, d) # Example: M input samples of dimension d.
@@ -23,7 +23,7 @@ A paper of MFMC applied to UQ with spent nuclear fuel is under preparation.
 >>> results = get_two_level_estimates(ys, ysSurr[:N], ysSurr, calculate_MSEs = True, adjust_alpha = True)
 >>>
 >>> # Computed moments:
->>> results['moments MC']
+>>> results['moments MC']  # Mean, variance, skewness, kurtosis
 array([ -4.47172337,  24.05847351,  14.71051787, 943.96656693])
 >>> results['moments MFMC']
 array([-4.47758822e-01,  6.02057815e+01, -2.17309562e+01,  1.05442748e+04])
